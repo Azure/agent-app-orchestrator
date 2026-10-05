@@ -11,6 +11,7 @@ import hmac
 import hashlib
 from typing import Optional, Dict, List, TYPE_CHECKING
 from datetime import datetime, timedelta
+from azure.core.exceptions import AzureError
 from fastapi import HTTPException, Header
 import jwt
 
@@ -180,7 +181,7 @@ SERVICE_AUTH_HEADER = "X-Service-Authorization"
 def _config_value(key: str) -> Optional[str]:
     try:
         value = get_config().get_value(key, default=os.getenv(key))
-    except Exception:
+    except (AzureError, ValueError, TypeError, OSError):
         value = os.getenv(key)
     return _normalize_token(value)
 
@@ -235,7 +236,7 @@ async def _validate_service_token(raw_header: str) -> bool:
         for attempt in range(2):
             try:
                 jwks = await _get_cached_public_keys(tenant_id, jwks_url)
-            except Exception:
+            except (httpx.HTTPError, ValueError):
                 logging.warning("[Auth] Unable to fetch JWKS for service token validation")
                 break
             jwk = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
