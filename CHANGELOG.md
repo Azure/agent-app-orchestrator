@@ -1,6 +1,6 @@
 # Changelog
 
-## [v5.0.0] - 2026-10-03
+## [v5.1.0] - 2026-10-05
 
 ### Added
 
@@ -11,6 +11,8 @@
   Callers authenticate with their managed identity; no shared secret is
   needed. The `Authorization` header stays reserved for the user OBO token.
   The Dapr token and `X-API-KEY` remain as fallbacks.
+
+## [v5.0.0] - 2026-10-03
 
 ### Changed
 
