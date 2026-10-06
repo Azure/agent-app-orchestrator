@@ -8,7 +8,7 @@ from azure.appconfiguration import (
 )
 from azure.appconfiguration.provider import (
     AzureAppConfigurationKeyVaultOptions,
-    load as _provider_load,
+    load,
     SettingSelector,
 )
 from connectors.identity_manager import get_identity_manager
@@ -22,10 +22,10 @@ class AppConfigClient:
 
     def __init__(self):
         """
-        Bulk-loads all keys into an in-memory dict from the most common labels used by GPT-RAG:
+        Bulk-loads all keys into an in-memory dict from the most common labels used by Agent Landing Zone:
         - 'orchestrator' (legacy / shared deployments)
         - 'gpt-rag-orchestrator' (service-specific)
-        - 'agent-lz' then legacy 'gpt-rag' (base / shared; see load() below)
+        - 'agent-lz' (base / shared)
 
         Precedence is determined by the order of selectors (earlier wins for duplicate keys).
         """
@@ -65,7 +65,7 @@ class AppConfigClient:
         loaded_labels = list(LOADED_LABELS)
         legacy_orchestrator_label_selector = SettingSelector(label_filter='orchestrator', key_filter='*')
         orchestrator_label_selector = SettingSelector(label_filter='gpt-rag-orchestrator', key_filter='*')
-        base_label_selector = SettingSelector(label_filter='gpt-rag', key_filter='*')
+        base_label_selector = SettingSelector(label_filter=AGENTLZ_LABEL, key_filter='*')
         no_label_selector = SettingSelector(label_filter=None, key_filter='*')
 
         logging.info(
@@ -236,36 +236,11 @@ class AppConfigClient:
         write_client.set_configuration_setting(setting)
 
 
-# Agent Landing Zone rebrand (Azure/GPT-RAG#695): dual-read for one release.
-# The 'agent-lz' label and AGENTLZ_ key prefix win; 'gpt-rag' and GPT_RAG_ remain fallbacks.
-# These helpers live after the class so AppConfigClient.__init__ (including its
-# governed provider-load try/except) stays unchanged; names resolve at call time.
+# Agent Landing Zone (Azure/GPT-RAG#695): only the 'agent-lz' base label is read.
 AGENTLZ_LABEL = "agent-lz"
-LEGACY_BASE_LABEL = "gpt-rag"
-LOADED_LABELS = ("orchestrator", "gpt-rag-orchestrator", AGENTLZ_LABEL, LEGACY_BASE_LABEL, "<no-label>")
-AGENTLZ_KEY_PREFIX = "AGENTLZ_"
-LEGACY_KEY_PREFIX = "GPT_RAG_"
+LOADED_LABELS = ("orchestrator", "gpt-rag-orchestrator", AGENTLZ_LABEL, "<no-label>")
 
 
 def candidate_keys(key: str) -> list[str]:
-    """Return lookup keys in precedence order (AGENTLZ_ before GPT_RAG_)."""
-    if key.startswith(AGENTLZ_KEY_PREFIX):
-        return [key, LEGACY_KEY_PREFIX + key[len(AGENTLZ_KEY_PREFIX):]]
-    if key.startswith(LEGACY_KEY_PREFIX):
-        return [AGENTLZ_KEY_PREFIX + key[len(LEGACY_KEY_PREFIX):], key]
+    """Return lookup keys in precedence order (single read: the key itself)."""
     return [key]
-
-
-def with_agentlz_selector(selects: list) -> list:
-    """Insert an 'agent-lz' selector immediately before the legacy 'gpt-rag' selector."""
-    result = []
-    for selector in selects:
-        if getattr(selector, "label_filter", None) == LEGACY_BASE_LABEL:
-            result.append(SettingSelector(label_filter=AGENTLZ_LABEL, key_filter=selector.key_filter))
-        result.append(selector)
-    return result
-
-
-def load(*, selects: list, **kwargs: Any):
-    """Provider ``load`` with the agent-lz label read ahead of the legacy gpt-rag label."""
-    return _provider_load(selects=with_agentlz_selector(selects), **kwargs)
