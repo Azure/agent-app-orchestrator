@@ -27,7 +27,7 @@ import xml.etree.ElementTree as ET
 
 
 CHECKS = ("lint", "typing", "architecture", "exceptions", "policy")
-REPOSITORY = "Azure/agent-app-orchestrator"
+REPOSITORY = "Azure/gpt-rag-orchestrator"
 REQUIRED_JOBS = (*CHECKS, "tests", "frontend")
 RECORDS = ("policy.json", "module-surfaces.json", "typing-scope.json",
            "typing-baseline.json", "exceptions.json")
