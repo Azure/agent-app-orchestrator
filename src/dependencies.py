@@ -11,6 +11,7 @@ import hmac
 import hashlib
 from typing import Optional, Dict, List, TYPE_CHECKING
 from datetime import datetime, timedelta
+from azure.core.exceptions import AzureError
 from fastapi import HTTPException, Header
 import jwt
 
@@ -174,20 +175,129 @@ def _normalize_token(value: Optional[str]) -> Optional[str]:
         v = v[1:-1].strip()
     return v or None
 
+SERVICE_AUTH_HEADER = "X-Service-Authorization"
+
+
+def _config_value(key: str) -> Optional[str]:
+    try:
+        value = get_config().get_value(key, default=os.getenv(key))
+    except (AzureError, ValueError, TypeError, OSError):
+        value = os.getenv(key)
+    return _normalize_token(value)
+
+
+def _split_ids(value: Optional[str]) -> List[str]:
+    if not value:
+        return []
+    return [v.strip().lower() for v in str(value).split(",") if v.strip()]
+
+
+async def _validate_service_token(raw_header: str) -> bool:
+    """Validate a keyless service-to-service Entra token (ADR-0019).
+
+    The caller (for example the UI) presents a managed identity access token in
+    the ``X-Service-Authorization`` header. The token must be signed by the
+    tenant, target the configured audience, be unexpired, and its ``oid`` (or
+    ``azp``/``appid``) must be in ``ORCHESTRATOR_ALLOWED_CALLER_IDS``.
+    """
+    token = _normalize_token(raw_header)
+    if token and token.lower().startswith("bearer "):
+        token = token[7:].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Invalid service token")
+
+    tenant_id = _config_value("AZURE_TENANT_ID") or _config_value("OAUTH_AZURE_AD_TENANT_ID")
+    audience = _config_value("ORCHESTRATOR_AUTH_AUDIENCE")
+    allowed = _split_ids(_config_value("ORCHESTRATOR_ALLOWED_CALLER_IDS"))
+    if not tenant_id or not audience or not allowed:
+        logging.error(
+            "[Auth] Service token presented but keyless auth is not configured "
+            "(tenant=%s audience=%s allowed_callers=%d)",
+            "set" if tenant_id else "missing",
+            "set" if audience else "missing",
+            len(allowed),
+        )
+        raise HTTPException(status_code=401, detail="Service authentication not configured")
+
+    audiences = {audience}
+    if audience.startswith("api://"):
+        audiences.add(audience[len("api://"):])
+    else:
+        audiences.add(f"api://{audience}")
+
+    try:
+        kid = jwt.get_unverified_header(token).get("kid")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid service token")
+
+    issuers = [f"https://sts.windows.net/{tenant_id}/", f"https://login.microsoftonline.com/{tenant_id}/v2.0"]
+    claims = None
+    for jwks_url in _jwks_urls_for_tenant(tenant_id).values():
+        for attempt in range(2):
+            try:
+                jwks = await _get_cached_public_keys(tenant_id, jwks_url)
+            except (httpx.HTTPError, ValueError):
+                logging.warning("[Auth] Unable to fetch JWKS for service token validation")
+                break
+            jwk = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
+            if jwk is None:
+                if attempt == 0:
+                    _force_refresh_jwks_cache(tenant_id, jwks_url)
+                    continue
+                break
+            try:
+                public_key = jwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(jwk))
+                claims = jwt.decode(
+                    token,
+                    public_key,
+                    algorithms=["RS256"],
+                    audience=list(audiences),
+                    issuer=issuers,
+                    options={"require": ["exp", "iss", "aud"]},
+                )
+            except jwt.PyJWTError as exc:
+                logging.warning("[Auth] Service token rejected: %s", type(exc).__name__)
+                raise HTTPException(status_code=401, detail="Invalid service token")
+            break
+        if claims is not None:
+            break
+
+    if claims is None:
+        raise HTTPException(status_code=401, detail="Invalid service token")
+
+    caller_ids = {str(claims.get(c)).lower() for c in ("oid", "azp", "appid") if claims.get(c)}
+    if not caller_ids.intersection(allowed):
+        logging.warning("[Auth] Service token caller is not in ORCHESTRATOR_ALLOWED_CALLER_IDS")
+        raise HTTPException(status_code=401, detail="Caller not allowed")
+
+    logging.debug("[Auth] Service token validated")
+    return True
+
+
 async def validate_auth(
     dapr_api_token: str = Header(None, alias="dapr-api-token"),
-    x_api_key: str = Header(None, alias="X-API-KEY")
+    x_api_key: str = Header(None, alias="X-API-KEY"),
+    x_service_authorization: str = Header(None, alias=SERVICE_AUTH_HEADER),
 ):
     """
     Authentication dependency (no authorization here):
-    1) Prefer dapr-api-token if present; otherwise use X-API-KEY.
-    2) Missing or invalid credentials => 401 Unauthorized.
-    3) 403 Forbidden should be used only by downstream authorization checks (not here).
+    1) Prefer the keyless Entra service token (X-Service-Authorization) if present.
+    2) Otherwise dapr-api-token; otherwise X-API-KEY.
+    3) Missing or invalid credentials => 401 Unauthorized.
+    4) 403 Forbidden should be used only by downstream authorization checks (not here).
     """
 
     # Skip auth in development if DISABLE_AUTH is set
     if os.getenv("DISABLE_AUTH", "").lower() == "true":
         return True
+
+    # Direct callers (tests) may leave the FastAPI Header default in place.
+    if isinstance(x_service_authorization, str) and x_service_authorization.strip():
+        return await _validate_service_token(x_service_authorization)
+    if not isinstance(dapr_api_token, str):
+        dapr_api_token = None
+    if not isinstance(x_api_key, str):
+        x_api_key = None
 
     # 1) Check dapr-api-token first if provided
     provided_dapr = _normalize_token(dapr_api_token)
