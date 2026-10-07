@@ -1,0 +1,77 @@
+name: Transfer new issues to agent-landing-zone
+
+# Activation: this workflow must be present on the repository's default branch.
+# Set the ISSUE_TRANSFER_TOKEN Actions secret to a token authorized to transfer
+# issues from Azure/agent-app-orchestrator to Azure/agent-landing-zone.
+# The token's identity needs write access to both repositories; for a
+# fine-grained PAT, select both repositories and grant Issues: read and write.
+# Apply any required Azure organization approval/SSO.
+# The repository-scoped GITHUB_TOKEN cannot perform this cross-repository move.
+# Only newly opened issues are transferred, not existing or reopened issues.
+# To disable automatic transfers, disable this workflow in the Actions UI.
+# Failed runs can be rerun after correcting token permissions or configuration.
+
+on:
+  issues:
+    types: [opened]
+
+permissions: {}
+
+concurrency:
+  group: transfer-issue-${{ github.event.issue.node_id }}
+  cancel-in-progress: false
+
+jobs:
+  transfer:
+    if: github.repository == 'Azure/agent-app-orchestrator'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Transfer issue
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        env:
+          ISSUE_TRANSFER_TOKEN: ${{ secrets.ISSUE_TRANSFER_TOKEN }}
+        with:
+          github-token: ${{ secrets.ISSUE_TRANSFER_TOKEN }}
+          script: |
+            if (!process.env.ISSUE_TRANSFER_TOKEN) {
+              core.setFailed('Configure the ISSUE_TRANSFER_TOKEN Actions secret with access to both repositories.');
+              return;
+            }
+
+            const destination = 'Azure/agent-landing-zone';
+            const result = await github.graphql(`
+              query($issueId: ID!) {
+                node(id: $issueId) {
+                  ... on Issue {
+                    id
+                    repository { nameWithOwner }
+                  }
+                }
+                repository(owner: "Azure", name: "agent-landing-zone") { id }
+              }
+            `, { issueId: context.payload.issue.node_id });
+
+            if (!result.node || !result.repository) {
+              core.setFailed('The issue or destination repository is unavailable to ISSUE_TRANSFER_TOKEN.');
+              return;
+            }
+
+            const currentRepository = result.node.repository.nameWithOwner;
+            if (currentRepository.toLowerCase() === destination.toLowerCase()) {
+              core.notice('Issue is already in the destination repository; no transfer needed.');
+              return;
+            }
+            if (currentRepository.toLowerCase() !== context.payload.repository.full_name.toLowerCase()) {
+              core.setFailed('Issue is no longer in the source repository; refusing to transfer it.');
+              return;
+            }
+
+            await github.graphql(`
+              mutation($issueId: ID!, $repositoryId: ID!) {
+                transferIssue(input: { issueId: $issueId, repositoryId: $repositoryId }) {
+                  issue { id }
+                }
+              }
+            `, { issueId: result.node.id, repositoryId: result.repository.id });
+            core.notice(`Issue transferred to ${destination}.`);
