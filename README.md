@@ -429,7 +429,7 @@ Track cross-repository provisioning and canonical documentation work in
 
 ## Documentation
 
-For comprehensive information about GPT-RAG, including architecture details, configuration guides, best practices, troubleshooting resources, deployment guidance, customization options, and advanced usage scenarios, please refer to the [official project documentation](https://azure.github.io/GPT-RAG/).
+For comprehensive information about the Agent Landing Zone, including architecture details, configuration guides, best practices, troubleshooting resources, deployment guidance, customization options, and advanced usage scenarios, please refer to the [official project documentation](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/).
 
 ## Dashboard
 
@@ -455,7 +455,7 @@ The data comes from the existing conversation/history Cosmos DB container used b
 
 Use a single Microsoft Entra app registration for both the dashboard SPA and the orchestrator API. The same application (client) id is the MSAL `clientId`, the backend token audience, and the `<client-id>` segment in the default scope `api://<client-id>/access_as_user`. Using separate SPA and API app registrations requires a different configuration model.
 
-The App Registration also needs a **Single-page application** redirect URI pointing at `https://<host>/dashboard/` (trailing slash), an exposed `access_as_user` scope, and an `Admin` app role assigned to every user who should see the dashboard. Full step-by-step in the GPT-RAG docs: [Admin Dashboard Sign-in](https://azure.github.io/GPT-RAG/howto_dashboard_signin/).
+The App Registration also needs a **Single-page application** redirect URI pointing at `https://<host>/dashboard/` (trailing slash), an exposed `access_as_user` scope, and an `Admin` app role assigned to every user who should see the dashboard. See the Agent Landing Zone docs: [Operations](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/operations/).
 
 Define the role under **Microsoft Entra ID > App registrations > <your app> > App roles**. Create exactly one app role with value `Admin` and allowed member type `Users/Groups`. The backend checks the token's `roles` claim for the exact case-sensitive value `Admin`; other role names or casing are rejected. Assign users under **Enterprise applications > <your app> > Users and groups** by selecting the `Admin` role.
 
