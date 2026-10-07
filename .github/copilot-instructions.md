@@ -65,7 +65,7 @@ are in `.github/instructions/release.instructions.md`. Load the
 ## Documentation consistency
 
 User-facing documentation lives on the `docs` branch of `Azure/GPT-RAG` and
-is published at https://azure.github.io/GPT-RAG/.
+is published at https://azure.github.io/AI-Landing-Zones/agent-landing-zone/.
 
 When behavior, a configuration key, a default, deployment, operation, or user
 experience changes:

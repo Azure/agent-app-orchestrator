@@ -10,7 +10,7 @@ turns the result into a pull request gate.
 - End-to-end evaluation workflow (dataset, evaluators, PR and dev gates):
   [AgentOps HTTP agent tutorial](https://azure.github.io/agentops/tutorial-http-agent/).
 - Retrieval tuning with the Document Retrieval evaluator and ranking metrics:
-  [GPT-RAG retrieval optimization how-to](https://azure.github.io/GPT-RAG/howto_retrieval_optimization/).
+  [Agent Landing Zone retrieval configuration](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/configuration/#retrieval).
 
 ## Why it changed
 
