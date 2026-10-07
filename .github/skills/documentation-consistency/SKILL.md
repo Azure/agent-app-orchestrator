@@ -6,7 +6,7 @@ description: Keeps GPT-RAG Orchestrator user and operator documentation aligned 
 # GPT-RAG Orchestrator documentation consistency
 
 User-facing documentation lives on the `docs` branch of `Azure/GPT-RAG` and
-is published at https://azure.github.io/GPT-RAG/.
+is published at https://azure.github.io/AI-Landing-Zones/agent-landing-zone/.
 
 1. Identify the user or operator behavior that changed.
 2. Search the documentation source for the feature, API, strategy,

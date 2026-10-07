@@ -43,7 +43,7 @@ are resolved through Key Vault references.
 
 This component participates in a multi-repository solution. User-facing
 product documentation lives on the `docs` branch of `Azure/GPT-RAG` and is
-published at https://azure.github.io/GPT-RAG/.
+published at https://azure.github.io/AI-Landing-Zones/agent-landing-zone/.
 
 ## Repository boundaries
 
