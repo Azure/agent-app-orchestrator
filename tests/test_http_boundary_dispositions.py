@@ -241,7 +241,7 @@ def test_dashboard_partial_writes_preserve_500_per_key_and_skip_refresh(caplog, 
         })
     assert response.status_code == 500
     assert [item[0] for item in writes] == ["AGENT_STRATEGY", "REASONING_EFFORT"]
-    assert all(item[2] == "agent-app-orchestrator" for item in writes)
+    assert all(item[2] == "gpt-rag-orchestrator" for item in writes)
     assert response.json()["detail"]["errors"][0]["key"] == "CHAT_TEMPERATURE"
     assert response.json()["detail"]["errors"][0]["error"]
     assert MARKER not in response.text + caplog.text
@@ -309,7 +309,7 @@ def test_actual_appconfig_write_consumer_never_reports_failed_update_as_applied(
     assert response.status_code == 500
     sdk.set_configuration_setting.assert_called_once()
     setting = sdk.set_configuration_setting.call_args.args[0]
-    assert (setting.key, setting.value, setting.label) == ("CHAT_TEMPERATURE", "0.7", "agent-app-orchestrator")
+    assert (setting.key, setting.value, setting.label) == ("CHAT_TEMPERATURE", "0.7", "gpt-rag-orchestrator")
     if failure_stage == "write":
         refresh.assert_not_called()
         assert response.json()["detail"]["errors"] == [
