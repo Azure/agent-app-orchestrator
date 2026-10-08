@@ -10,8 +10,8 @@ products:
 - azure-openai
 - azure-ai-search
 urlFragment: agent-app-orchestrator
-name: Multi-repo ChatGPT and Enterprise data with Azure OpenAI and AI Search
-description: Agent Landing Zone core is a Retrieval-Augmented Generation pattern running in Azure, using Azure AI Search for retrieval and Azure OpenAI large language models to power ChatGPT-style and Q&A experiences.
+name: Agent Landing Zone Orchestrator
+description: Multi-agent RAG orchestrator for Agent Landing Zone, built on Microsoft Foundry Agent Service, Microsoft Agent Framework, and Azure AI Search.
 -->
 # Agent Landing Zone Orchestrator
 
