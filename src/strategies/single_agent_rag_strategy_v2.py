@@ -529,7 +529,7 @@ class SingleAgentRAGStrategyV2(BaseAgentStrategy):
                     # Resuming from the previous turn's response id instead
                     # breaks tool-call chaining on follow-up turns, which fail
                     # with "400 No tool call found for function call output"
-                    # (Azure/GPT-RAG#505).
+                    # (Azure/agent-landing-zone#505).
                     thread_id = await agent_provider_v2.ensure_conversation_id(conv)
                     thread = agent.get_new_thread(service_thread_id=thread_id)
                     run_input = user_message

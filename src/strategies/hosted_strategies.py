@@ -21,7 +21,7 @@ from typing import TypedDict
 from agent_framework import ChatMessage, Role
 
 # Strategies that call out to the Toolbox MCP server for retrieval and must
-# therefore carry a validated Foundry call id (ADR-0001, Azure/GPT-RAG#591).
+# therefore carry a validated Foundry call id (ADR-0001, Azure/agent-landing-zone#591).
 # Other hosted-eligible strategies use the classic Foundry IQ / OBO retrieval
 # path and are out of scope for this passthrough.
 HOSTED_TOOLBOX_STRATEGIES: frozenset[str] = frozenset({

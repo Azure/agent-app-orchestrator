@@ -11,13 +11,13 @@ header for per-user document-level security (query-time ACL/RBAC enforcement).
 Pattern A vs Pattern B is mostly a *server-side* knowledge base configuration
 concern: the client always targets the configured knowledge base name. The one
 query-time difference is Pattern B security-field trimming. When enabled,
-GPT-RAG injects a ``filterAddOn`` OData filter under ``knowledgeSourceParams``.
+Agent Landing Zone injects a ``filterAddOn`` OData filter under ``knowledgeSourceParams``.
 That filter is deliberately separate from the native OBO header. The OBO header
 drives Foundry IQ permission-aware sources such as ADLS Gen2 ACLs, SharePoint,
-Purview, OneLake, and Fabric. The Pattern B filter narrows the registered GPT-RAG
+Purview, OneLake, and Fabric. The Pattern B filter narrows the registered Agent Landing Zone
 Azure AI Search index that carries custom security fields.
 
-Introduced for Azure/GPT-RAG#526. Per-user security on the retrieve action is a
+Introduced for Azure/agent-landing-zone#526. Per-user security on the retrieve action is a
 preview capability, so the API version is pinned to a single configurable
 constant (see :data:`DEFAULT_FOUNDRY_IQ_API_VERSION`).
 """
@@ -80,7 +80,7 @@ FOUNDRY_IQ_FORWARD_SOURCE_AUTH_KEY = "FOUNDRY_IQ_FORWARD_SOURCE_AUTH"
 # Hybrid file-upload sidecar (Pattern A + UI upload). When enabled, and the
 # primary knowledge source is the native azureBlob corpus, the retrieve action
 # also queries a second searchIndex knowledge source built over the existing
-# GPT-RAG index (SEARCH_RAG_INDEX_NAME). That second source carries the runtime
+# Agent Landing Zone index (SEARCH_RAG_INDEX_NAME). That second source carries the runtime
 # uploads and is trimmed by a conversationId plus caller-ownership filterAddOn
 # so uploaded files are only visible to their uploader inside the conversation
 # that created them. Off by default.
@@ -153,7 +153,7 @@ SHAREPOINT_REMOTE_FILTER_EXPRESSION_ADD_ON_KEY = (
 # the remote kinds (workIQ / fabricOntology / fabricDataAgent), Foundry IQ
 # manages the underlying Azure AI Search index internally: at KS registration
 # time it is bound to a Fabric workspace + lakehouse and provisions the
-# datasource, skillset, index, and indexer transparently. GPT-RAG therefore
+# datasource, skillset, index, and indexer transparently. Agent Landing Zone therefore
 # does not maintain a Bicep AI Search sidecar for OneLake; the KS itself
 # owns the pipeline. The retrieve-time entry only needs the knowledge source
 # name and reference flags; workspace / lakehouse identifiers are used only
@@ -340,9 +340,9 @@ def build_pattern_b_filter_add_on(
     user_context: Optional[Mapping[str, Any]],
     security_field_name: str = "metadata_security_id",
 ) -> str:
-    """Build the Pattern B ``filterAddOn`` for GPT-RAG security fields.
+    """Build the Pattern B ``filterAddOn`` for Agent Landing Zone security fields.
 
-    Pattern B registers GPT-RAG's existing Azure AI Search index as a Foundry IQ
+    Pattern B registers Agent Landing Zone's existing Azure AI Search index as a Foundry IQ
     ``searchIndex`` knowledge source. The custom security fields on that index
     are not enforced by ``x-ms-query-source-authorization``. They must be
     expressed as an OData ``filterAddOn`` on the retrieve request. The filter
@@ -1261,7 +1261,7 @@ class FoundryIQClient:
         - no conversation knowledge source name was provisioned.
 
         When it does apply, the source is a ``searchIndex`` knowledge source over
-        the existing GPT-RAG index, always trimmed by a conversationId plus
+        the existing Agent Landing Zone index, always trimmed by a conversationId plus
         caller-ownership ``filterAddOn``; it is skipped when the caller
         principal is unknown. ``failOnError`` is ``false`` so
         an empty or missing upload index degrades gracefully to the shared corpus
@@ -1931,7 +1931,7 @@ class FoundryIQClient:
         if conversation_id:
             logging.debug("[FoundryIQClient] conversation_id=%s", conversation_id)
 
-        # GPT-RAG configures the knowledge base with minimal reasoning, which
+        # Agent Landing Zone configures the knowledge base with minimal reasoning, which
         # requires explicit intents rather than chat messages.
         if self.mcp_config.enabled:
             body: Dict[str, Any] = {

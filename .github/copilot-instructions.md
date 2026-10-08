@@ -1,4 +1,4 @@
-# GPT-RAG Orchestrator engineering core
+# Agent Landing Zone Orchestrator engineering core
 
 Read `AGENTS.md` and every scoped instruction that applies before changing a
 file. The assets under `.github/agents/` and `.github/skills/` are GitHub
@@ -64,7 +64,7 @@ are in `.github/instructions/release.instructions.md`. Load the
 
 ## Documentation consistency
 
-User-facing documentation lives on the `docs` branch of `Azure/GPT-RAG` and
+User-facing documentation lives on the `docs` branch of `Azure/agent-landing-zone` and
 is published at https://azure.github.io/AI-Landing-Zones/agent-landing-zone/.
 
 When behavior, a configuration key, a default, deployment, operation, or user

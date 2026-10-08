@@ -302,7 +302,7 @@ class MultimodalStrategy(BaseAgentStrategy):
                     else None
                 )
 
-            # Decision #5 (Azure/GPT-RAG#526): multimodal stays on Azure AI Search
+            # Decision #5 (Azure/agent-landing-zone#526): multimodal stays on Azure AI Search
             # for v3.0.0 — Pattern A captioning/image parity for Foundry IQ is
             # deferred. The selector is still honored for consistency: when
             # foundry_iq is configured, retrieval is text-only via
