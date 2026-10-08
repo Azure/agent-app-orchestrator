@@ -15,6 +15,15 @@ from connectors.identity_manager import get_identity_manager
 
 from tenacity import retry, wait_random_exponential, stop_after_attempt, RetryError
 
+
+def _with_legacy_app_label(extra_selector):
+    """Return a provider loader that also reads the legacy app label after the current one."""
+    def _load(*args, selects, **kwargs):
+        merged = list(selects)
+        merged.insert(min(2, len(merged)), extra_selector)
+        return load(*args, selects=merged, **kwargs)
+    return _load
+
 class AppConfigClient:
 
     credential = None
@@ -69,6 +78,7 @@ class AppConfigClient:
         legacy_app_label_selector = SettingSelector(label_filter=LEGACY_APP_LABEL, key_filter='*')
         base_label_selector = SettingSelector(label_filter=AGENTLZ_LABEL, key_filter='*')
         no_label_selector = SettingSelector(label_filter=None, key_filter='*')
+        load = _with_legacy_app_label(legacy_app_label_selector)
 
         logging.info(
             "Azure App Configuration init: endpoint_host=%s identity=%s allow_env_vars=%s labels=%s",
@@ -81,7 +91,7 @@ class AppConfigClient:
         # Try to load from Azure App Configuration. If auth fails, don't spam stack traces.
         try:
             self.client = load(
-                selects=[legacy_orchestrator_label_selector, orchestrator_label_selector, legacy_app_label_selector, base_label_selector, no_label_selector],
+                selects=[legacy_orchestrator_label_selector, orchestrator_label_selector, base_label_selector, no_label_selector],
                 endpoint=endpoint,
                 credential=self.credential,
                 key_vault_options=AzureAppConfigurationKeyVaultOptions(credential=self.credential)
