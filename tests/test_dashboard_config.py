@@ -37,7 +37,7 @@ def _build_cfg(initial: Dict[str, Any] | None = None) -> MagicMock:
             return None
         return default
 
-    def _set_value(key: str, value: Any, label: str = "agent-app-orchestrator"):
+    def _set_value(key: str, value: Any, label: str = "gpt-rag-orchestrator"):
         store[key] = str(value).lower() if isinstance(value, bool) else str(value)
 
     cfg.get_value = MagicMock(side_effect=_get_value)
@@ -89,7 +89,7 @@ def test_get_config_returns_every_allowlisted_key():
     r = client.get("/api/dashboard/config")
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["label"] == "agent-app-orchestrator"
+    assert body["label"] == "gpt-rag-orchestrator"
 
     returned_keys: set[str] = set()
     returned_section_ids: set[str] = set()
@@ -200,7 +200,7 @@ def test_put_config_happy_path_writes_and_refreshes_cache():
     assert written["AGENT_STRATEGY"] == "maf_lite"
     assert written["CHAT_TEMPERATURE"] == 1.2
     for call in cfg.set_value.call_args_list:
-        assert call.args[2] == "agent-app-orchestrator"
+        assert call.args[2] == "gpt-rag-orchestrator"
 
     body = r.json()
     agent_field = next(

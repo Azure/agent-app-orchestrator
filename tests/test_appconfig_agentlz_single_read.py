@@ -24,7 +24,7 @@ def _client(monkeypatch, mock_identity_manager, values, env_enabled=False):
 def test_label_selectors_read_agent_lz_only(monkeypatch, mock_identity_manager):
     _, load = _client(monkeypatch, mock_identity_manager, {})
     labels = [s.label_filter for s in load.call_args.kwargs["selects"]]
-    assert labels == ["orchestrator", "gpt-rag-orchestrator", "agent-app-orchestrator", "agent-lz", None]
+    assert labels == ["orchestrator", "gpt-rag-orchestrator", "agent-lz", None]
 
 
 @pytest.mark.parametrize("key", ["AGENTLZ_FOO", "GPT_RAG_FOO", "SEARCH_SERVICE_NAME"])
