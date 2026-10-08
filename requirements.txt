@@ -22,7 +22,7 @@ aiohttp==3.14.3
 pydantic==2.13.5
 
 # Authentication and token validation
-PyJWT==2.13.0
+PyJWT==2.15.0
 cryptography>=50.0.1
 httpx>=0.28.1
 
