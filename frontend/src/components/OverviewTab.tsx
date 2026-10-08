@@ -23,7 +23,7 @@ import {
 import { clampToToday, rangeLabel, type OverviewRange } from "./overview/range";
 import { OVERVIEW_TOOLTIPS } from "./overview/copy";
 
-const STORAGE_KEY = "gpt-rag-orchestrator.overview.range";
+const STORAGE_KEY = "agent-app-orchestrator.overview.range";
 const DEFAULT_RANGE: OverviewRange = { preset: "30d" };
 
 function readStoredRange(): OverviewRange {

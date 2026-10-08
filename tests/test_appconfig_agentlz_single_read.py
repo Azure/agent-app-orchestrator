@@ -69,4 +69,4 @@ def test_telemetry_service_name_uses_agentlz_prefix():
     assert len(calls) == 1
     service_name = calls[0].args[2]
     assert isinstance(service_name, ast.Constant) and service_name.value == "agentlz.orchestrator"
-    assert constants.APP_NAME == "gpt-rag-orchestrator"
+    assert constants.APP_NAME == "agent-app-orchestrator"

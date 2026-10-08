@@ -1,5 +1,5 @@
 {
-  "name": "gpt-rag-orchestrator-dashboard",
+  "name": "agent-app-orchestrator-dashboard",
   "private": true,
   "version": "0.0.0",
   "type": "module",
