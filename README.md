@@ -10,8 +10,8 @@ products:
 - azure-openai
 - azure-ai-search
 urlFragment: agent-app-orchestrator
-name: Multi-repo ChatGPT and Enterprise data with Azure OpenAI and AI Search
-description: Agent Landing Zone core is a Retrieval-Augmented Generation pattern running in Azure, using Azure AI Search for retrieval and Azure OpenAI large language models to power ChatGPT-style and Q&A experiences.
+name: Agent Landing Zone Orchestrator
+description: Multi-agent RAG orchestrator for Agent Landing Zone, built on Microsoft Foundry Agent Service, Microsoft Agent Framework, and Azure AI Search.
 -->
 # Agent Landing Zone Orchestrator
 
@@ -37,8 +37,8 @@ and the existing MCP configuration keys. The default transport is still `sse`,
 and the streamed response contract is unchanged.
 
 Configure these values in Azure App Configuration. Use the
-`gpt-rag-orchestrator` label for an orchestrator-specific override, or the
-shared `gpt-rag` label when every component should use the same value:
+`agent-app-orchestrator` label for an orchestrator-specific override, or the
+shared `agent-lz` label when every component should use the same value:
 
 | Key | Default | Purpose |
 | --- | --- | --- |
@@ -445,7 +445,7 @@ The data comes from the existing conversation/history Cosmos DB container used b
 
 **Access control.** When authentication is on (`OAUTH_AZURE_AD_TENANT_ID` is configured), the entire `/api/dashboard/*` surface — except the small `/api/dashboard/version` and `/api/dashboard/auth-config` endpoints used by the SPA at bootstrap — requires the caller's bearer token to include the `Admin` app role. The `/dashboard` HTML page itself is served openly so the SPA can load, call `/api/dashboard/auth-config`, and either sign the user in via MSAL (Authorization Code + PKCE) or render an access-denied state on a 403 response. When authentication is off, the dashboard is open like the rest of the app in development.
 
-**Sign-in configuration.** The SPA reads its runtime auth configuration from `GET /api/dashboard/auth-config`, which is derived from these App Configuration keys under the `gpt-rag-orchestrator` label:
+**Sign-in configuration.** The SPA reads its runtime auth configuration from `GET /api/dashboard/auth-config`, which is derived from these App Configuration keys under the `agent-app-orchestrator` label:
 
 | Key | Required | Purpose |
 | --- | --- | --- |

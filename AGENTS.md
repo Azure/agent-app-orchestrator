@@ -123,7 +123,7 @@ instructions before meaningful changes in these areas.
   endpoints outside local development, explicit credentials, bounded
   timeouts/output, strict schemas, and safe logging.
 - Keep App Configuration label precedence and the
-  `gpt-rag-orchestrator` write label explicit. A new runtime setting is a
+  `agent-app-orchestrator` write label explicit. A new runtime setting is a
   contract that may also require infrastructure and documentation changes.
 - Do not claim legal or regulatory compliance from telemetry or audit
   evidence.
