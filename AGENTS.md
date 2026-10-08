@@ -1,4 +1,4 @@
-# GPT-RAG Orchestrator engineering-agent contract
+# Agent Landing Zone Orchestrator engineering-agent contract
 
 This is the stable repository-wide contract for GitHub Copilot engineering
 agents. Detailed procedures belong in `.github/skills/`, and file-specific
@@ -27,7 +27,7 @@ human decision when the missing information cannot be established safely.
 
 ## What this repository is
 
-GPT-RAG Orchestrator is the Python 3.12 FastAPI service in the GPT-RAG
+Agent Landing Zone Orchestrator is the Python 3.12 FastAPI service in the Agent Landing Zone
 solution. It accepts authenticated or anonymous orchestration requests,
 selects a configured runtime strategy, streams responses over SSE, persists
 conversation state in Cosmos DB, retrieves grounding from Azure AI Search or
@@ -42,7 +42,7 @@ Configuration is loaded with service-specific and shared labels, and secrets
 are resolved through Key Vault references.
 
 This component participates in a multi-repository solution. User-facing
-product documentation lives on the `docs` branch of `Azure/GPT-RAG` and is
+product documentation lives on the `docs` branch of `Azure/agent-landing-zone` and is
 published at https://azure.github.io/AI-Landing-Zones/agent-landing-zone/.
 
 ## Repository boundaries
@@ -132,7 +132,7 @@ instructions before meaningful changes in these areas.
 
 ### Python quality policy (bootstrap under review)
 
-The quality bootstrap for Azure/GPT-RAG#681 is not an activated merge rule.
+The quality bootstrap for Azure/agent-landing-zone#681 is not an activated merge rule.
 Use Python 3.12 and an isolated environment:
 
 ```powershell
@@ -450,8 +450,8 @@ This component remains compatible by contract with UI `v2.6.2` and ingestion
 `v2.7.3`; no wire/audit/auth/configuration migration is introduced. Live Azure
 compatibility and recovery are separate, unperformed acceptance steps.
 Recovery is the preceding orchestrator artifact (shipped `v4.1.1`), without
-data migration or peer changes. Coordination is Azure/GPT-RAG#689; published
-contributor documentation is being coordinated in Azure/GPT-RAG#688 on `docs`.
+data migration or peer changes. Coordination is Azure/agent-landing-zone#689; published
+contributor documentation is being coordinated in Azure/agent-landing-zone#688 on `docs`.
 
 - Discover existing commands from `pyproject.toml`, package manifests, and
   workflows; do not invent validation commands.
@@ -489,7 +489,7 @@ The repository-specific rules in `.github/copilot-instructions.md` and
   Release titles follow the repository's exact version rules;
 - `[Unreleased]` exists only on `develop`, never on a release branch or
   `main`;
-- user-visible changes update the published GPT-RAG documentation in the same
+- user-visible changes update the published Agent Landing Zone documentation in the same
   coordinated change.
 
 Load `orchestrator-release` for release work and

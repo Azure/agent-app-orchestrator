@@ -34,10 +34,10 @@ If deploying this change could impact existing applications, please specify.
 
 If this change depends on pull requests in other repositories within the solution, provide the links below.
 
-- [ ] [gpt-rag](https://github.com/azure/gpt-rag)
-- [ ] [gpt-rag-orchestrator](https://github.com/azure/gpt-rag-orchestrator)
-- [ ] [gpt-rag-ingestion](https://github.com/azure/gpt-rag-ingestion)
-- [ ] [gpt-rag-ui](https://github.com/azure/gpt-rag-ui)
+- [ ] [gpt-rag](https://github.com/Azure/agent-landing-zone)
+- [ ] [agent-app-orchestrator](https://github.com/Azure/agent-app-orchestrator)
+- [ ] [agent-app-ingestion](https://github.com/Azure/agent-app-ingestion)
+- [ ] [agent-app-ui](https://github.com/Azure/agent-app-ui)
 
 ## Does this require changes to project documentation?
 

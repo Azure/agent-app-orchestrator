@@ -8,7 +8,7 @@ applyTo: "scripts/**/*.ps1,scripts/**/*.sh,.azure/**,azure.yaml,Dockerfile,infra
 - Treat lifecycle ordering, `azd` environment reuse, and environment-variable
   propagation as public deployment behavior.
 - Preserve compatibility with the infrastructure provisioned by
-  `Azure/GPT-RAG`.
+  `Azure/agent-landing-zone`.
 - Do not edit generated infrastructure content when an owning source or
   template exists; change the authoritative input instead.
 - Quote paths and external input safely. Never echo credentials, tokens,

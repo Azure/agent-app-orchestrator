@@ -6,7 +6,7 @@ client that follows one hits the raw blob and fails with
 ``PublicAccessNotPermitted`` whenever public blob access is disabled — which is
 the secure default and is commonly enforced by tenant Azure Policy.
 
-The Chainlit frontend solves this at render time (Azure/gpt-rag-ui#79), but that
+The Chainlit frontend solves this at render time (Azure/agent-app-ui#79), but that
 hook only exists for the frontend. Surfaces that consume the hosted agent
 directly — the Foundry portal Playground, "Call agent", or any custom client —
 render the model's markdown verbatim and have nowhere to sign the href. Signing
@@ -16,7 +16,7 @@ surface.
 Signing is best effort: every failure path returns the original URL so a
 citation is never dropped from an otherwise good answer.
 
-Introduced for Azure/GPT-RAG#660.
+Introduced for Azure/agent-landing-zone#660.
 """
 
 import asyncio

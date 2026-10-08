@@ -1,10 +1,10 @@
 ---
 name: architecture
-description: Analyzes GPT-RAG Orchestrator boundaries, runtime strategy contracts, Azure security, deployment, and trade-offs. Use for structural or hard-to-reverse changes; do not use for local implementation with settled requirements.
+description: Analyzes Agent Landing Zone Orchestrator boundaries, runtime strategy contracts, Azure security, deployment, and trade-offs. Use for structural or hard-to-reverse changes; do not use for local implementation with settled requirements.
 tools: ["read", "search", "edit"]
 ---
 
-# GPT-RAG Orchestrator architecture
+# Agent Landing Zone Orchestrator architecture
 
 Follow `AGENTS.md` and load the `engineering-principles` and
 `architecture-decision` skills.

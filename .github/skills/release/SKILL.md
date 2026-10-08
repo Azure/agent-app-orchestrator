@@ -1,6 +1,6 @@
 ---
 name: release
-description: Prepare and reconcile GPT-RAG Orchestrator releases, including authoritative version discovery, semantic version selection, release branches, VERSION and CHANGELOG updates, release notes, tags, GitHub Releases, and publication approval gates. Use when asked to prepare, version, tag, publish, roll back, or reconcile a release.
+description: Prepare and reconcile Agent Landing Zone Orchestrator releases, including authoritative version discovery, semantic version selection, release branches, VERSION and CHANGELOG updates, release notes, tags, GitHub Releases, and publication approval gates. Use when asked to prepare, version, tag, publish, roll back, or reconcile a release.
 ---
 
 # Release
