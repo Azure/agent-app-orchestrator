@@ -64,9 +64,9 @@ class AppConfigClient:
 
         # Prefer more specific labels first.
         loaded_labels = list(LOADED_LABELS)
-        legacy_orchestrator_label_selector = SettingSelector(label_filter='orchestrator', key_filter='*')
+        # Legacy labels load before the current app label so the new label overrides them.
+        legacy_orchestrator_label_selector = SettingSelector(label_filter=f'orchestrator,{LEGACY_APP_LABEL}', key_filter='*')
         orchestrator_label_selector = SettingSelector(label_filter=APP_LABEL, key_filter='*')
-        legacy_app_label_selector = SettingSelector(label_filter=LEGACY_APP_LABEL, key_filter='*')
         base_label_selector = SettingSelector(label_filter=AGENTLZ_LABEL, key_filter='*')
         no_label_selector = SettingSelector(label_filter=None, key_filter='*')
 
@@ -81,7 +81,7 @@ class AppConfigClient:
         # Try to load from Azure App Configuration. If auth fails, don't spam stack traces.
         try:
             self.client = load(
-                selects=[legacy_orchestrator_label_selector, orchestrator_label_selector, legacy_app_label_selector, base_label_selector, no_label_selector],
+                selects=[legacy_orchestrator_label_selector, orchestrator_label_selector, base_label_selector, no_label_selector],
                 endpoint=endpoint,
                 credential=self.credential,
                 key_vault_options=AzureAppConfigurationKeyVaultOptions(credential=self.credential)
