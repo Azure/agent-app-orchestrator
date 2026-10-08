@@ -27,16 +27,16 @@ This plan does not authorize deployment, merge, release, deletion, or Azure/Entr
 
 ## Workspace analysis
 
-- Repository: `Azure/gpt-rag-orchestrator`
+- Repository: `Azure/agent-app-orchestrator`
 - Branch: `feature/dashboard-msal-signin`
-- PR: `Azure/gpt-rag-orchestrator#260`
+- PR: `Azure/agent-app-orchestrator#260`
 - Base branch: `develop`
 - Application: Python 3.12 FastAPI orchestrator with a Vite/React admin dashboard served from `/dashboard/`.
 - Deployment artifacts already present:
   - `Dockerfile` builds the dashboard bundle in a Node 20 stage and copies it into the Python runtime image.
-  - `azure.yaml` exists and points to azd hooks/scripts, but this repository does not carry standalone `infra/` files. Full GPT-RAG environment creation is owned by the main GPT-RAG infrastructure repository.
+  - `azure.yaml` exists and points to azd hooks/scripts, but this repository does not carry standalone `infra/` files. Full Agent Landing Zone environment creation is owned by the main Agent Landing Zone infrastructure repository.
 - Preparation mode: MODIFY existing application and validate a PR image against a real tenant.
-- Recipe: use existing GPT-RAG deployment flow for environment provisioning, then deploy the orchestrator container image/revision from this branch. If no reusable environment exists, recreate a controlled validation environment from the main GPT-RAG infrastructure instead of modifying unrelated resource groups.
+- Recipe: use existing Agent Landing Zone deployment flow for environment provisioning, then deploy the orchestrator container image/revision from this branch. If no reusable environment exists, recreate a controlled validation environment from the main Agent Landing Zone infrastructure instead of modifying unrelated resource groups.
 
 ## Current environment inventory
 
@@ -45,7 +45,7 @@ The previously planned resource group `rg-gptrag-546val` is not present in subsc
 - `az group show --name rg-gptrag-546val` returned `ResourceGroupNotFound`.
 - No matching Container Apps or App Configuration stores were found by read-only resource listing in this subscription.
 
-Candidate GPT-RAG resource groups found in the subscription:
+Candidate Agent Landing Zone resource groups found in the subscription:
 
 | Resource group | Location | Tags | Read-only finding |
 | --- | --- | --- | --- |
@@ -57,8 +57,8 @@ Candidate GPT-RAG resource groups found in the subscription:
 
 Conclusion: do not assume the old validation environment is available. Validation should either:
 
-1. Recreate a new exact validation environment, for example `rg-gptrag-546val2`, from the main GPT-RAG infrastructure, or
-2. Use a user-approved existing environment only after confirming it has the orchestrator Container App, ACR, App Configuration, managed identity, Cosmos, and required GPT-RAG dependencies.
+1. Recreate a new exact validation environment, for example `rg-gptrag-546val2`, from the main Agent Landing Zone infrastructure, or
+2. Use a user-approved existing environment only after confirming it has the orchestrator Container App, ACR, App Configuration, managed identity, Cosmos, and required Agent Landing Zone dependencies.
 
 ## Entra application inventory
 
@@ -104,7 +104,7 @@ Restart or create a new Container App revision after changing `ENABLE_DASHBOARD`
 ## Validation deployment approach
 
 1. Confirm the target environment choice with Paulo:
-   - Recreate a new validation environment from GPT-RAG infrastructure, or
+   - Recreate a new validation environment from Agent Landing Zone infrastructure, or
    - Use an existing complete environment after read-only inventory confirms it is safe.
 2. Build an orchestrator image from the rebased PR branch.
 3. Push the image to the environment ACR.
@@ -176,9 +176,9 @@ README dashboard guidance now explains:
 1. Complete Azure E2E validation and record results in PR #260.
 2. Mark PR #260 ready for review if validation passes.
 3. Merge PR #260 into `develop`.
-4. Prepare the next `Azure/gpt-rag-orchestrator` release branch from `develop`, following this repository's `AGENTS.md` release rules.
+4. Prepare the next `Azure/agent-app-orchestrator` release branch from `develop`, following this repository's `AGENTS.md` release rules.
 5. Tag and publish the orchestrator release with the GitHub Release title exactly equal to the tag, for example `vX.Y.Z`.
-6. If the parent `Azure/gpt-rag` repository pins or consumes the orchestrator version, update it in a follow-up PR/release after the orchestrator release is available.
+6. If the parent `Azure/agent-landing-zone` repository pins or consumes the orchestrator version, update it in a follow-up PR/release after the orchestrator release is available.
 
 ## Planning checklist
 

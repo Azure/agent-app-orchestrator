@@ -1,9 +1,9 @@
 ---
 name: orchestrator-release
-description: Prepares and validates GPT-RAG Orchestrator releases. Use for VERSION, changelog entries, release branches, tags, GitHub Release notes, and synchronized develop follow-up.
+description: Prepares and validates Agent Landing Zone Orchestrator releases. Use for VERSION, changelog entries, release branches, tags, GitHub Release notes, and synchronized develop follow-up.
 ---
 
-# GPT-RAG Orchestrator release
+# Agent Landing Zone Orchestrator release
 
 Read `.github/copilot-instructions.md` and
 `.github/instructions/release.instructions.md` completely before changing a

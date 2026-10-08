@@ -1,9 +1,9 @@
 ---
 name: architecture-decision
-description: Conducts and records a verifiable GPT-RAG Orchestrator architectural decision. Use when a choice alters runtime strategy boundaries, contracts, identity, data, deployment, or operation with meaningful reversal cost.
+description: Conducts and records a verifiable Agent Landing Zone Orchestrator architectural decision. Use when a choice alters runtime strategy boundaries, contracts, identity, data, deployment, or operation with meaningful reversal cost.
 ---
 
-# GPT-RAG Orchestrator architectural decision
+# Agent Landing Zone Orchestrator architectural decision
 
 1. Load the relevant `engineering-principles` references.
 2. Define the user or operator outcome, constraints, affected repositories,

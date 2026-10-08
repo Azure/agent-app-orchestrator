@@ -1,7 +1,7 @@
 [project]
 name = "gpt-rag-orchestrator"
 version = "0.1.0"
-description = "GPT-RAG Orchestrator"
+description = "Agent Landing Zone Orchestrator"
 requires-python = ">=3.12"
 dependencies = [
     # Agent framework

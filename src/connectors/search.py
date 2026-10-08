@@ -25,7 +25,7 @@ from connectors.obo import (
 
 # Standardized log markers for retrieval/auth failure paths. Operators can grep
 # these to spot swallowed errors that would otherwise return empty results
-# silently. See issue Azure/GPT-RAG#508.
+# silently. See issue Azure/agent-landing-zone#508.
 _RETRIEVAL_AUTH_FAILURE_MARKER = "[Retrieval][AUTH_FAILURE]"
 _RETRIEVAL_ERROR_MARKER = "[Retrieval][ERROR]"
 
@@ -589,7 +589,7 @@ class SearchClient:
         :param query: The search query to find relevant documents.
         :return: Search results as a JSON string containing a list of documents with title, link and content.
         """
-        # Backend selector (Azure/GPT-RAG#526). The default 'ai_search' keeps the
+        # Backend selector (Azure/agent-landing-zone#526). The default 'ai_search' keeps the
         # exact path below; 'foundry_iq' delegates to the knowledge base retrieve
         # action and maps into the identical return contract.
         if get_retrieval_backend() == RETRIEVAL_BACKEND_FOUNDRY_IQ:

@@ -1,9 +1,9 @@
 """Formatting helpers for surfacing indexed ``custom_metadata`` into context.
 
 The ``custom_metadata`` field is populated during ingestion (see
-Azure/GPT-RAG#487) and already lives in the AI Search index. These helpers turn
+Azure/agent-landing-zone#487) and already lives in the AI Search index. These helpers turn
 that raw field into a compact, deterministic text block that retrieval paths can
-prepend to each document's content before it reaches the LLM (Azure/GPT-RAG#506).
+prepend to each document's content before it reaches the LLM (Azure/agent-landing-zone#506).
 
 This module is intentionally dependency-free: it imports only the standard
 library so it can be reused by connectors and strategies without creating import

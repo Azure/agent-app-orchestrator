@@ -1,7 +1,7 @@
 # Evaluations (deprecated)
 
 The standalone evaluation scripts that used to live in this folder have been
-removed. Evaluation for GPT-RAG agents now runs through the AgentOps Accelerator,
+removed. Evaluation for Agent Landing Zone agents now runs through the AgentOps Accelerator,
 which scores the live orchestrator endpoint with Foundry's built-in evaluators and
 turns the result into a pull request gate.
 

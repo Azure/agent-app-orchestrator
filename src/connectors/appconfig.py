@@ -236,7 +236,7 @@ class AppConfigClient:
         write_client.set_configuration_setting(setting)
 
 
-# Agent Landing Zone (Azure/GPT-RAG#695): only the 'agent-lz' base label is read.
+# Agent Landing Zone (Azure/agent-landing-zone#695): only the 'agent-lz' base label is read.
 AGENTLZ_LABEL = "agent-lz"
 LOADED_LABELS = ("orchestrator", "gpt-rag-orchestrator", AGENTLZ_LABEL, "<no-label>")
 

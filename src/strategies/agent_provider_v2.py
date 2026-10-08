@@ -350,7 +350,7 @@ async def ensure_conversation_id(conv: dict) -> str:
     chains the tool output to the wrong response: the resumed turn id overrides
     the in-loop response that actually holds the ``function_call``, so the
     service rejects the tool result with ``400 No tool call found for function
-    call output`` (Azure/GPT-RAG#505). Backing the thread with a conversation
+    call output`` (Azure/agent-landing-zone#505). Backing the thread with a conversation
     object keeps the ``function_call`` and its output in the same conversation,
     so chaining resolves on every turn.
 
