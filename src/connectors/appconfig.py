@@ -64,8 +64,7 @@ class AppConfigClient:
 
         # Prefer more specific labels first.
         loaded_labels = list(LOADED_LABELS)
-        legacy_orchestrator_label_selector = SettingSelector(label_filter='orchestrator', key_filter='*')
-        legacy_service_label_selector = SettingSelector(label_filter='gpt-rag-orchestrator', key_filter='*')
+        legacy_orchestrator_label_selector = SettingSelector(label_filter='gpt-rag-orchestrator', key_filter='*')
         orchestrator_label_selector = SettingSelector(label_filter='agent-app-orchestrator', key_filter='*')
         base_label_selector = SettingSelector(label_filter=AGENTLZ_LABEL, key_filter='*')
         no_label_selector = SettingSelector(label_filter=None, key_filter='*')
@@ -81,7 +80,7 @@ class AppConfigClient:
         # Try to load from Azure App Configuration. If auth fails, don't spam stack traces.
         try:
             self.client = load(
-                selects=[legacy_orchestrator_label_selector, legacy_service_label_selector, orchestrator_label_selector, base_label_selector, no_label_selector],
+                selects=[legacy_orchestrator_label_selector, orchestrator_label_selector, base_label_selector, no_label_selector],
                 endpoint=endpoint,
                 credential=self.credential,
                 key_vault_options=AzureAppConfigurationKeyVaultOptions(credential=self.credential)
@@ -240,7 +239,7 @@ class AppConfigClient:
 
 # Agent Landing Zone (Azure/agent-landing-zone#695): only the 'agent-lz' base label is read.
 AGENTLZ_LABEL = "agent-lz"
-LOADED_LABELS = ("orchestrator", "gpt-rag-orchestrator", "agent-app-orchestrator", AGENTLZ_LABEL, "<no-label>")
+LOADED_LABELS = ("gpt-rag-orchestrator", "agent-app-orchestrator", AGENTLZ_LABEL, "<no-label>")
 
 
 def candidate_keys(key: str) -> list[str]:
