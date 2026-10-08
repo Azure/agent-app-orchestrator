@@ -49,7 +49,7 @@ from schemas import (
 # The App Configuration label all dashboard writes target. Picked to match the
 # orchestrator-specific selector loaded by :class:`AppConfigClient`, so values
 # set here take precedence over the shared ``gpt-rag`` baseline.
-WRITE_LABEL = "gpt-rag-orchestrator"
+WRITE_LABEL = "agent-app-orchestrator"
 
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard-config"])
