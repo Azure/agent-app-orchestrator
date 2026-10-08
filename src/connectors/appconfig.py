@@ -15,6 +15,15 @@ from connectors.identity_manager import get_identity_manager
 
 from tenacity import retry, wait_random_exponential, stop_after_attempt, RetryError
 
+
+def _with_legacy_app_label(extra_selector):
+    """Return a provider loader that also reads the legacy app label after the current one."""
+    def _load(*args, selects, **kwargs):
+        merged = list(selects)
+        merged.insert(min(2, len(merged)), extra_selector)
+        return load(*args, selects=merged, **kwargs)
+    return _load
+
 class AppConfigClient:
 
     credential = None
@@ -24,7 +33,8 @@ class AppConfigClient:
         """
         Bulk-loads all keys into an in-memory dict from the most common labels used by Agent Landing Zone:
         - 'orchestrator' (legacy / shared deployments)
-        - 'gpt-rag-orchestrator' (service-specific)
+        - 'agent-app-orchestrator' (service-specific)
+        - 'gpt-rag-orchestrator' (legacy service-specific)
         - 'agent-lz' (base / shared)
 
         Precedence is determined by the order of selectors (earlier wins for duplicate keys).
@@ -64,9 +74,11 @@ class AppConfigClient:
         # Prefer more specific labels first.
         loaded_labels = list(LOADED_LABELS)
         legacy_orchestrator_label_selector = SettingSelector(label_filter='orchestrator', key_filter='*')
-        orchestrator_label_selector = SettingSelector(label_filter='gpt-rag-orchestrator', key_filter='*')
+        orchestrator_label_selector = SettingSelector(label_filter=APP_LABEL, key_filter='*')
+        legacy_app_label_selector = SettingSelector(label_filter=LEGACY_APP_LABEL, key_filter='*')
         base_label_selector = SettingSelector(label_filter=AGENTLZ_LABEL, key_filter='*')
         no_label_selector = SettingSelector(label_filter=None, key_filter='*')
+        load = _with_legacy_app_label(legacy_app_label_selector)
 
         logging.info(
             "Azure App Configuration init: endpoint_host=%s identity=%s allow_env_vars=%s labels=%s",
@@ -197,7 +209,7 @@ class AppConfigClient:
     # Write support (used by the admin dashboard Configuration tab)
     # -----------------------------------------------------------------
 
-    def set_value(self, key: str, value: Any, label: str = "gpt-rag-orchestrator") -> None:
+    def set_value(self, key: str, value: Any, label: str = "agent-app-orchestrator") -> None:
         """Write a single key/value pair back to Azure App Configuration.
 
         The read-side of this class uses the provider's bulk ``load`` helper,
@@ -238,7 +250,9 @@ class AppConfigClient:
 
 # Agent Landing Zone (Azure/agent-landing-zone#695): only the 'agent-lz' base label is read.
 AGENTLZ_LABEL = "agent-lz"
-LOADED_LABELS = ("orchestrator", "gpt-rag-orchestrator", AGENTLZ_LABEL, "<no-label>")
+APP_LABEL = "agent-app-orchestrator"
+LEGACY_APP_LABEL = "gpt-rag-orchestrator"
+LOADED_LABELS = ("orchestrator", APP_LABEL, LEGACY_APP_LABEL, AGENTLZ_LABEL, "<no-label>")
 
 
 def candidate_keys(key: str) -> list[str]:
