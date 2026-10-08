@@ -1,9 +1,9 @@
 ---
 name: engineering-principles
-description: GPT-RAG Orchestrator architecture and implementation principles. Use for design, review, meaningful refactoring, runtime strategies, FastAPI, Azure integration, security, testing, or operations.
+description: Agent Landing Zone Orchestrator architecture and implementation principles. Use for design, review, meaningful refactoring, runtime strategies, FastAPI, Azure integration, security, testing, or operations.
 ---
 
-# GPT-RAG Orchestrator engineering principles
+# Agent Landing Zone Orchestrator engineering principles
 
 Load only the references needed for the task:
 

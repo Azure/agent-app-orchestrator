@@ -9,7 +9,7 @@ The value is resolved once and cached so the four strategy seams and the
 instead of calling ``cfg.get`` per request. ``reset_retrieval_backend_cache`` is
 provided for tests that need to flip the value.
 
-Introduced for Azure/GPT-RAG#526 (Foundry IQ as a first-class retrieval
+Introduced for Azure/agent-landing-zone#526 (Foundry IQ as a first-class retrieval
 backend). The default stays ``ai_search`` so enabling the seam changes no
 runtime behavior until an operator opts in.
 """

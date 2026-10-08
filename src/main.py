@@ -94,7 +94,7 @@ _SERVER_TRUSTED_USER_CONTEXT_KEYS = frozenset(
 
 
 def _startup_banner() -> None:
-    name = "GPT-RAG Orchestrator"
+    name = "Agent Landing Zone Orchestrator"
     version = None
     try:
         if VERSION_FILE.exists():
@@ -243,7 +243,7 @@ async def lifespan(app: FastAPI):
     Telemetry.configure_monitoring(
         cfg,
         APPLICATION_INSIGHTS_CONNECTION_STRING,
-        "agentlz.orchestrator",  # OTel service.name (Azure/GPT-RAG#695)
+        "agentlz.orchestrator",  # OTel service.name (Azure/agent-landing-zone#695)
         APP_VERSION,
     )
     
@@ -290,8 +290,8 @@ async def lifespan(app: FastAPI):
     # cleanup logic after shutdown
 
 app = FastAPI(
-    title="GPT-RAG Orchestrator",
-    description="GPT-RAG Orchestrator FastAPI",
+    title="Agent Landing Zone Orchestrator",
+    description="Agent Landing Zone Orchestrator FastAPI",
     version=APP_VERSION,
     lifespan=lifespan
 )

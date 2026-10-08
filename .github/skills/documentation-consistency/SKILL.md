@@ -1,11 +1,11 @@
 ---
 name: documentation-consistency
-description: Keeps GPT-RAG Orchestrator user and operator documentation aligned with shipped behavior. Use for runtime strategies, APIs, configuration keys, deployment, defaults, operations, or breaking changes.
+description: Keeps Agent Landing Zone Orchestrator user and operator documentation aligned with shipped behavior. Use for runtime strategies, APIs, configuration keys, deployment, defaults, operations, or breaking changes.
 ---
 
-# GPT-RAG Orchestrator documentation consistency
+# Agent Landing Zone Orchestrator documentation consistency
 
-User-facing documentation lives on the `docs` branch of `Azure/GPT-RAG` and
+User-facing documentation lives on the `docs` branch of `Azure/agent-landing-zone` and
 is published at https://azure.github.io/AI-Landing-Zones/agent-landing-zone/.
 
 1. Identify the user or operator behavior that changed.

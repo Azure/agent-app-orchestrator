@@ -158,7 +158,7 @@ _FOUNDRY_IQ_KNOWLEDGE_SOURCE_KIND_OPTIONS: List[SettingOption] = [
     SettingOption(
         "searchIndex",
         "Existing Azure AI Search index",
-        "Legacy Pattern B: register the GPT-RAG generated search index and optionally apply filterAddOn.",
+        "Legacy Pattern B: register the Agent Landing Zone generated search index and optionally apply filterAddOn.",
     ),
     SettingOption(
         "workIQ",
@@ -335,7 +335,7 @@ SECTIONS: List[SettingSection] = [
                 description=(
                     "Knowledge source to target when RETRIEVAL_BACKEND=foundry_iq. "
                     "By default this is the native Blob/ADLS source created by the "
-                    "deployment. For Pattern B, set it to the registered GPT-RAG "
+                    "deployment. For Pattern B, set it to the registered Agent Landing Zone "
                     "Azure AI Search index knowledge source."
                 ),
             ),
@@ -358,7 +358,7 @@ SECTIONS: List[SettingSection] = [
                 label="Enable Pattern B filterAddOn",
                 description=(
                     "When enabled, Foundry IQ retrieve requests add a "
-                    "filterAddOn OData expression for GPT-RAG custom security "
+                    "filterAddOn OData expression for Agent Landing Zone custom security "
                     "fields. This is distinct from x-ms-query-source-authorization, "
                     "which is used for native Foundry IQ permission-aware sources."
                 ),
@@ -370,8 +370,8 @@ SECTIONS: List[SettingSection] = [
                 label="Pattern B security field",
                 description=(
                     "Collection field used by the registered Azure AI Search "
-                    "index for GPT-RAG security trimming. Keep the default for "
-                    "standard GPT-RAG indexes."
+                    "index for Agent Landing Zone security trimming. Keep the default for "
+                    "standard Agent Landing Zone indexes."
                 ),
             ),
             SettingSpec(
@@ -395,7 +395,7 @@ SECTIONS: List[SettingSection] = [
                 description=(
                     "When RETRIEVAL_BACKEND=foundry_iq and the primary knowledge "
                     "source is the native azureBlob corpus, also query a second "
-                    "searchIndex source built over the existing GPT-RAG index so "
+                    "searchIndex source built over the existing Agent Landing Zone index so "
                     "files uploaded in the chat UI are grounded alongside the "
                     "shared corpus. The upload source is trimmed by a "
                     "conversationId plus caller-ownership filterAddOn, so "

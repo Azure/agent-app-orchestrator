@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Deploys the GPT-RAG orchestrator Container App image.
+    Deploys the Agent Landing Zone orchestrator Container App image.
 #>
 
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)

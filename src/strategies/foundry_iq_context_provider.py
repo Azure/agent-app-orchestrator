@@ -9,9 +9,9 @@ behavior therefore does not change with the selected ``RETRIEVAL_BACKEND``.
 Per-request OBO permission trimming is forwarded by :class:`FoundryIQClient` in
 the ``x-ms-query-source-authorization`` header. That OBO header is a distinct
 mechanism from the Pattern B ``filterAddOn`` security filter, which narrows a
-registered GPT-RAG Azure AI Search index using its custom security fields.
+registered Agent Landing Zone Azure AI Search index using its custom security fields.
 
-Introduced for Azure/GPT-RAG#526.
+Introduced for Azure/agent-landing-zone#526.
 """
 
 import logging
