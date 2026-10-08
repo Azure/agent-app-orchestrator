@@ -7,7 +7,7 @@ identical regardless of the selected ``RETRIEVAL_BACKEND``. Extracting the promp
 preamble and per-document formatting here guarantees both providers produce
 byte-identical context.
 
-Introduced for Azure/GPT-RAG#526.
+Introduced for Azure/agent-landing-zone#526.
 """
 
 from typing import List

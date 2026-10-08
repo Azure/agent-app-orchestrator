@@ -1,9 +1,9 @@
-# GPT-RAG Orchestrator architecture
+# Agent Landing Zone Orchestrator architecture
 
 ## Purpose and runtime flow
 
-GPT-RAG Orchestrator is the Python 3.12 FastAPI runtime component of the
-GPT-RAG solution. At a high level it:
+Agent Landing Zone Orchestrator is the Python 3.12 FastAPI runtime component of the
+Agent Landing Zone solution. At a high level it:
 
 1. validates the HTTP request and identity;
 2. creates an `Orchestrator` for the conversation;
@@ -59,4 +59,4 @@ implicit dictionaries or duplicated configuration knowledge.
 - Read API behavior from FastAPI routes and Pydantic schemas.
 - Read audit semantics from `contracts/` and their tests.
 - Read release state from `VERSION` and `CHANGELOG.md`.
-- Read user-facing product documentation from the `Azure/GPT-RAG` docs branch.
+- Read user-facing product documentation from the `Azure/agent-landing-zone` docs branch.

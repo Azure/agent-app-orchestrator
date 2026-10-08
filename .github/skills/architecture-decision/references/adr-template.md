@@ -62,7 +62,7 @@ fitness functions.]
 
 ## Documentation impact
 
-[README and pages on the `Azure/GPT-RAG` docs branch that must change.]
+[README and pages on the `Azure/agent-landing-zone` docs branch that must change.]
 
 ## Review trigger
 

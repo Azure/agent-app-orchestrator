@@ -15,7 +15,7 @@ this codebase. Two platform-injected headers survive the gateway:
   user from this call id server-side -- where the real OAuth context lives
   -- and applies native, per-user document trimming.
 
-ADR-0001 (Azure/GPT-RAG) freezes this passthrough as the required hosted
+ADR-0001 (Azure/agent-landing-zone) freezes this passthrough as the required hosted
 document-security path: a group-filter or manual ``metadata_security_id``
 fallback is not a hosted default. When the call id is absent or malformed,
 hosted retrieval must fail closed instead of silently falling back to

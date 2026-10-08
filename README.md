@@ -9,15 +9,15 @@ products:
 - azure-ai-foundry
 - azure-openai
 - azure-ai-search
-urlFragment: GPT-RAG
+urlFragment: agent-app-orchestrator
 name: Multi-repo ChatGPT and Enterprise data with Azure OpenAI and AI Search
-description: GPT-RAG core is a Retrieval-Augmented Generation pattern running in Azure, using Azure AI Search for retrieval and Azure OpenAI large language models to power ChatGPT-style and Q&A experiences.
+description: Agent Landing Zone core is a Retrieval-Augmented Generation pattern running in Azure, using Azure AI Search for retrieval and Azure OpenAI large language models to power ChatGPT-style and Q&A experiences.
 -->
-# GPT-RAG Orchestrator
+# Agent Landing Zone Orchestrator
 
-Part of the [GPT-RAG](https://github.com/Azure/gpt-rag) solution.
+Part of the [Agent Landing Zone](https://github.com/Azure/agent-landing-zone) solution.
 
-The **GPT-RAG Orchestrator** service is an agentic orchestration layer built on Azure AI Foundry Agent Service and the Microsoft Agent Framework. It enables agent-based RAG workflows by coordinating multiple specialized agents—each with a defined role—to collaboratively generate accurate, context-aware responses for complex user queries.
+The **Agent Landing Zone Orchestrator** service is an agentic orchestration layer built on Azure AI Foundry Agent Service and the Microsoft Agent Framework. It enables agent-based RAG workflows by coordinating multiple specialized agents—each with a defined role—to collaboratively generate accurate, context-aware responses for complex user queries.
 
 ### Available Strategies
 
@@ -83,7 +83,7 @@ When the orchestrator runs as a Microsoft Foundry hosted agent
 (`api.hosted_entrypoint`, canonical `POST /responses`) with
 `AGENT_STRATEGY=mcp`, document-security identity is established solely through
 the Foundry hosted-agent protocol 2.0 call context — per
-[Azure/GPT-RAG ADR-0001](https://github.com/Azure/GPT-RAG/blob/main/docs/adr/ADR-0001-hosted-agents.md),
+[Azure/agent-landing-zone ADR-0001](https://github.com/Azure/agent-landing-zone/blob/main/docs/adr/ADR-0001-hosted-agents.md),
 Toolbox OAuth identity passthrough is the required native path and a manual
 group-filter fallback is never the default.
 
@@ -348,7 +348,7 @@ Work IQ is opt-in and off by default:
 - ACL is enforced natively by Microsoft 365 via the forwarded user token — no `filterAddOn` is emitted for Work IQ.
 - Remote kinds can take 40–60 seconds end-to-end; set `FOUNDRY_IQ_MAX_RUNTIME_SECONDS` (default `120`) to control the retrieve runtime ceiling. The value is only emitted when a remote kind is enabled, so Pattern A / Pattern B requests stay byte-identical.
 
-Work IQ is currently a gated preview and requires admin consent plus a Work IQ knowledge source provisioned on the same Azure AI Search service. See the enablement guide in the [Azure/GPT-RAG](https://github.com/Azure/GPT-RAG) repo for the end-to-end setup ([issue #543](https://github.com/Azure/GPT-RAG/issues/543)).
+Work IQ is currently a gated preview and requires admin consent plus a Work IQ knowledge source provisioned on the same Azure AI Search service. See the enablement guide in the [Azure/agent-landing-zone](https://github.com/Azure/agent-landing-zone) repo for the end-to-end setup ([issue #543](https://github.com/Azure/agent-landing-zone/issues/543)).
 
 #### Generic MCP Server knowledge sources (Preview)
 
@@ -425,7 +425,7 @@ and sends no header. MCP retrieval also validates
 configuration stops retrieval instead of skipping a source.
 
 Track cross-repository provisioning and canonical documentation work in
-[Azure/gpt-rag#567](https://github.com/Azure/GPT-RAG/issues/567).
+[Azure/agent-landing-zone#567](https://github.com/Azure/agent-landing-zone/issues/567).
 
 ## Documentation
 
@@ -479,7 +479,7 @@ The dev server proxies `/api` to `http://localhost:9000`, which is where the orc
 
 ## Prerequisites
 
-Before deploying the application, you must provision the infrastructure as described in the [GPT-RAG](https://github.com/azure/gpt-rag) repo. This includes creating all necessary Azure resources required to support the application runtime.
+Before deploying the application, you must provision the infrastructure as described in the [Agent Landing Zone](https://github.com/Azure/agent-landing-zone) repo. This includes creating all necessary Azure resources required to support the application runtime.
 
 <details markdown="block">
 <summary>Click to view <strong>software</strong> prerequisites</summary>
@@ -506,7 +506,7 @@ az login
 
 Initialize the template:
 ```shell
-azd init -t azure/gpt-rag-orchestrator 
+azd init -t Azure/agent-app-orchestrator 
 ```
 > [!IMPORTANT]
 > Use the **same environment name** with `azd init` as in the infrastructure deployment to keep components consistent.
@@ -528,15 +528,15 @@ To deploy using a script, first clone the repository, set the App Configuration 
 ##### PowerShell (Windows)
 
 ```powershell
-git clone https://github.com/Azure/gpt-rag-orchestrator.git
+git clone https://github.com/Azure/agent-app-orchestrator.git
 $env:APP_CONFIG_ENDPOINT = "https://<your-app-config-name>.azconfig.io"
-cd gpt-rag-orchestrator
+cd agent-app-orchestrator
 .\scripts\deploy.ps1
 ```
 
 ## Found an Issue?
 
-Encountered an error or bug? Help us improve the quality of this accelerator by reporting issues or suggesting enhancements on our **[GitHub Issues page](https://github.com/Azure/GPT-RAG/issues)**. Your feedback helps make GPT-RAG better for everyone!
+Encountered an error or bug? Help us improve the quality of this accelerator by reporting issues or suggesting enhancements on our **[GitHub Issues page](https://github.com/Azure/agent-landing-zone/issues)**. Your feedback helps make Agent Landing Zone better for everyone!
 
 ## Previous Releases
 
@@ -545,7 +545,7 @@ Encountered an error or bug? Help us improve the quality of this accelerator by 
 
 ## 🤝 Contributing
 
-We appreciate contributions! See [CONTRIBUTING](https://github.com/Azure/gpt-rag/blob/main/CONTRIBUTING.md) for guidelines on submitting pull requests.
+We appreciate contributions! See [CONTRIBUTING](https://github.com/Azure/agent-landing-zone/blob/main/CONTRIBUTING.md) for guidelines on submitting pull requests.
 
 ## Trademarks
 

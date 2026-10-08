@@ -359,7 +359,7 @@ async def _create_hosted_streaming_response(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     # Toolbox-integrated strategies must carry a validated, platform-injected
-    # call id (ADR-0001, Azure/GPT-RAG#591). Never trust Authorization,
+    # call id (ADR-0001, Azure/agent-landing-zone#591). Never trust Authorization,
     # caller/model identity fields, or x-client group claims here.
     foundry_call_id: Optional[str] = None
     if strategy_key in HOSTED_TOOLBOX_STRATEGIES:
