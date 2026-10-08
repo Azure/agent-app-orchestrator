@@ -59,7 +59,7 @@ def _log_app_config_state(cfg: AppConfigClient, keys_to_check: Optional[List[str
         for k in keys_to_check:
             presence[k] = "present" if k in client_dict else "missing"
 
-    labels = "orchestrator,gpt-rag-orchestrator,agent-lz,<no-label>"
+    labels = "orchestrator,gpt-rag-orchestrator,agent-app-orchestrator,agent-lz,<no-label>"
     logging.warning(
         "%s AppConfig state: endpoint_set=%s endpoint_host=%s disabled=%s auth_failed=%s allow_env_vars=%s keys_loaded=%d labels=%s key_presence=%s",
         prefix,
@@ -514,7 +514,7 @@ async def validate_access_token(token: str) -> Dict:
             "[Auth] Missing tenant configuration in Azure App Configuration. "
             "Confirm: (1) APP_CONFIG_ENDPOINT is set for the orchestrator app, "
             "(2) Managed Identity has App Configuration Data Reader, "
-            "(3) key exists under an included label (e.g. 'agent-lz' / 'gpt-rag-orchestrator' / 'orchestrator')."
+            "(3) key exists under an included label (e.g. 'agent-lz' / 'agent-app-orchestrator')."
         )
         raise HTTPException(
             status_code=500,

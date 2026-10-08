@@ -7,7 +7,7 @@ JSON format within ``ChatMessage.text``.  The companion
 ``MultimodalChatClient`` detects this encoding and converts it to OpenAI's
 vision content array.
 
-Index fields used (set by gpt-rag-ingestion multimodal chunker):
+Index fields used (set by agent-app-ingestion multimodal chunker):
 - contentVector   — text embedding
 - captionVector   — image-caption embedding
 - relatedImages   — list of blob URLs for figures
