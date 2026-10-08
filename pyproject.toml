@@ -40,7 +40,7 @@ dependencies = [
     "opentelemetry-instrumentation-httpx>=0.64b0",
     
     # AI/ML
-    "openai==2.41.1",
+    "openai==3.24.0",
     "tiktoken>=0.7.0",
     
     # Data validation
