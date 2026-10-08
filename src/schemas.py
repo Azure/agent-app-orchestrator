@@ -356,7 +356,7 @@ ORCHESTRATOR_RESPONSES = {
         "description": "OK — successful stream response (SSE). Each SSE 'data:' line contains a JSON object.",
         "content": {
             "text/event-stream": {
-                "example": "gpt-rag answer"
+                "example": "agent answer"
             }
         }
     },
