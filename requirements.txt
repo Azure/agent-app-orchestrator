@@ -29,7 +29,7 @@ httpx>=0.28.1
 # Microsoft Agent Framework (MAF) dependencies
 agent-framework-core==1.0.0b260116
 agent-framework-azure-ai==1.0.0b260116
-agent-framework-azure-ai-search==1.0.0b260116
+agent-framework-azure-ai-search==1.0.0b261002
 opentelemetry-semantic-conventions-ai>=0.4.13,<0.5.0
 mcp>=1.25.0
 
