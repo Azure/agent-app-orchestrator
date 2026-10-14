@@ -127,14 +127,6 @@ def _with_legacy_app_label(
     return _load
 
 
-def _with_legacy_app_label(extra_selector):
-    """Return a provider loader that also reads the legacy app label after the current one."""
-    def _load(*args, selects, **kwargs):
-        merged = list(selects)
-        merged.insert(min(2, len(merged)), extra_selector)
-        return load(*args, selects=merged, **kwargs)
-    return _load
-
 class AppConfigClient:
 
     credential: TokenCredential | None = None
