@@ -126,6 +126,7 @@ def _with_legacy_app_label(
         return load(*args, selects=merged, **kwargs)
     return _load
 
+
 class AppConfigClient:
 
     credential: TokenCredential | None = None
