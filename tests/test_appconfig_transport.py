@@ -9,7 +9,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.connection import HTTPConnection
 
-from connectors.appconfig_transport import create_appconfig_transport
+from connectors.appconfig import _create_appconfig_transport as create_appconfig_transport
 
 
 ENDPOINT = "https://config.example.invalid"
