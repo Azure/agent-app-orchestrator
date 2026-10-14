@@ -12,6 +12,7 @@ from azure.appconfiguration.provider import (
     SettingSelector,
 )
 from connectors.identity_manager import get_identity_manager
+from connectors.appconfig_transport import create_appconfig_transport
 
 from tenacity import retry, wait_random_exponential, stop_after_attempt, RetryError
 
@@ -77,8 +78,30 @@ class AppConfigClient:
         orchestrator_label_selector = SettingSelector(label_filter=APP_LABEL, key_filter='*')
         legacy_app_label_selector = SettingSelector(label_filter=LEGACY_APP_LABEL, key_filter='*')
         base_label_selector = SettingSelector(label_filter=AGENTLZ_LABEL, key_filter='*')
-        no_label_selector = SettingSelector(label_filter=None, key_filter='*')
+        no_label_selector = SettingSelector(label_filter="\0", key_filter='*')
         load = _with_legacy_app_label(legacy_app_label_selector)
+
+        tls_compatibility = os.getenv("APP_CONFIG_TLS_COMPATIBILITY", "false").strip().lower()
+        if tls_compatibility not in ("true", "false"):
+            raise ValueError("APP_CONFIG_TLS_COMPATIBILITY must be true or false.")
+        key_vault_options = AzureAppConfigurationKeyVaultOptions(credential=self.credential)
+        transport_options = {}
+        if tls_compatibility == "true":
+            vault_endpoint = os.getenv("KEY_VAULT_URI", "").strip()
+            if not vault_endpoint:
+                raise ValueError("APP_CONFIG_TLS_COMPATIBILITY requires KEY_VAULT_URI.")
+            vault_transport = create_appconfig_transport(vault_endpoint)
+            transport_options["transport"] = create_appconfig_transport(endpoint)
+            key_vault_options = AzureAppConfigurationKeyVaultOptions(
+                credential=self.credential,
+                client_configs={
+                    vault_endpoint.rstrip("/") + "/": {"transport": vault_transport}
+                },
+            )
+            logging.info(
+                "Configuration TLS compatibility is enabled for App Configuration "
+                "and the configured Key Vault; certificate verification remains enabled."
+            )
 
         logging.info(
             "Azure App Configuration init: endpoint_host=%s identity=%s allow_env_vars=%s labels=%s",
@@ -94,7 +117,8 @@ class AppConfigClient:
                 selects=[legacy_orchestrator_label_selector, orchestrator_label_selector, base_label_selector, no_label_selector],
                 endpoint=endpoint,
                 credential=self.credential,
-                key_vault_options=AzureAppConfigurationKeyVaultOptions(credential=self.credential)
+                key_vault_options=key_vault_options,
+                **transport_options,
             )
             logging.info(
                 "Azure App Configuration loaded successfully (keys_loaded=%d).",
