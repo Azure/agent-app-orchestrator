@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [v5.2.1] - 2026-10-14
+
 ### Fixed
 
 - **Configuration label isolation.** Use the explicit null-label selector

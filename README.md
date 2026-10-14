@@ -11,13 +11,13 @@ products:
 - azure-ai-search
 urlFragment: agent-app-orchestrator
 name: Agent Landing Zone Orchestrator
-description: Multi-agent RAG orchestrator for Agent Landing Zone, built on Microsoft Foundry Agent Service, Microsoft Agent Framework, and Azure AI Search.
+description: Conversational agent orchestrator for Agent Landing Zone, built on Microsoft Foundry Agent Service and Microsoft Agent Framework.
 -->
 # Agent Landing Zone Orchestrator
 
 Part of the [Agent Landing Zone](https://github.com/Azure/agent-landing-zone) solution.
 
-The **Agent Landing Zone Orchestrator** service is an agentic orchestration layer built on Azure AI Foundry Agent Service and the Microsoft Agent Framework. It enables agent-based RAG workflows by coordinating multiple specialized agents—each with a defined role—to collaboratively generate accurate, context-aware responses for complex user queries.
+The **Agent Landing Zone Orchestrator** service is an agentic orchestration layer built on Azure AI Foundry Agent Service and the Microsoft Agent Framework. It powers conversational agent experiences by coordinating specialized agents—each with a defined role—that combine grounded knowledge retrieval, NL2SQL, and MCP tools to produce accurate, context-aware responses.
 
 ### Available Strategies
 
