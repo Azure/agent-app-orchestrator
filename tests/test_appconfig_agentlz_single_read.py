@@ -6,6 +6,8 @@ import ast
 from pathlib import Path
 
 import pytest
+import requests
+from azure.core.exceptions import ClientAuthenticationError
 
 import constants
 from connectors.appconfig import AppConfigClient, candidate_keys
@@ -24,7 +26,93 @@ def _client(monkeypatch, mock_identity_manager, values, env_enabled=False):
 def test_label_selectors_read_agent_lz_only(monkeypatch, mock_identity_manager):
     _, load = _client(monkeypatch, mock_identity_manager, {})
     labels = [s.label_filter for s in load.call_args.kwargs["selects"]]
-    assert labels == ["orchestrator", "agent-app-orchestrator", "gpt-rag-orchestrator", "agent-lz", None]
+    assert labels == ["orchestrator", "agent-app-orchestrator", "gpt-rag-orchestrator", "agent-lz", "\0"]
+
+
+def test_default_transport_does_not_require_a_key_vault_uri(monkeypatch, mock_identity_manager):
+    monkeypatch.delenv("APP_CONFIG_TLS_COMPATIBILITY", raising=False)
+    monkeypatch.delenv("KEY_VAULT_URI", raising=False)
+    with patch("connectors.appconfig._create_appconfig_transport") as transport:
+        _, load = _client(monkeypatch, mock_identity_manager, {})
+    transport.assert_not_called()
+    assert "transport" not in load.call_args.kwargs
+
+
+def test_opt_in_uses_verified_transports_for_both_endpoints(monkeypatch, mock_identity_manager):
+    monkeypatch.setenv("APP_CONFIG_TLS_COMPATIBILITY", "true")
+    monkeypatch.setenv("KEY_VAULT_URI", "https://vault.example.invalid/")
+    with patch("connectors.appconfig._create_appconfig_transport") as transport:
+        _, load = _client(monkeypatch, mock_identity_manager, {})
+    assert [call.args[0] for call in transport.call_args_list] == [
+        "https://vault.example.invalid/",
+        "https://config.example.invalid",
+    ]
+    assert load.call_args.kwargs["transport"] is transport.return_value
+    vault_options = load.call_args.kwargs["key_vault_options"]
+    assert vault_options.client_configs == {
+        "https://vault.example.invalid/": {"transport": transport.return_value}
+    }
+    assert vault_options.credential is mock_identity_manager.get_credential.return_value
+
+
+@pytest.mark.parametrize("value", ["", "yes", "typo"])
+def test_invalid_transport_option_fails_before_loading(monkeypatch, mock_identity_manager, value):
+    monkeypatch.setenv("APP_CONFIG_TLS_COMPATIBILITY", value)
+    monkeypatch.setenv("APP_CONFIG_ENDPOINT", "https://config.example.invalid")
+    with (
+        patch("connectors.appconfig.get_identity_manager", return_value=mock_identity_manager),
+        patch("connectors.appconfig.load") as load,
+        pytest.raises(ValueError, match="must be true or false"),
+    ):
+        AppConfigClient()
+    load.assert_not_called()
+
+
+def test_opt_in_requires_explicit_key_vault_uri(monkeypatch, mock_identity_manager):
+    monkeypatch.setenv("APP_CONFIG_TLS_COMPATIBILITY", "true")
+    monkeypatch.delenv("KEY_VAULT_URI", raising=False)
+    monkeypatch.setenv("APP_CONFIG_ENDPOINT", "https://config.example.invalid")
+    with (
+        patch("connectors.appconfig.get_identity_manager", return_value=mock_identity_manager),
+        patch("connectors.appconfig.load") as load,
+        pytest.raises(ValueError, match="requires KEY_VAULT_URI"),
+    ):
+        AppConfigClient()
+    load.assert_not_called()
+
+
+@pytest.mark.parametrize("compatibility", ["false", "true"])
+@pytest.mark.parametrize("error_type", [ClientAuthenticationError, requests.ReadTimeout])
+def test_transport_profile_preserves_provider_failure_classification(
+    monkeypatch, mock_identity_manager, caplog, compatibility, error_type
+):
+    monkeypatch.setenv("APP_CONFIG_ENDPOINT", "https://config.example.invalid")
+    monkeypatch.setenv("APP_CONFIG_TLS_COMPATIBILITY", compatibility)
+    monkeypatch.setenv("KEY_VAULT_URI", "https://vault.example.invalid/")
+    monkeypatch.setenv("allow_environment_variables", "false")
+    with (
+        patch("connectors.appconfig.get_identity_manager", return_value=mock_identity_manager),
+        patch("connectors.appconfig._create_appconfig_transport"),
+        patch("connectors.appconfig.load", side_effect=error_type("private-error-marker")),
+    ):
+        cfg = AppConfigClient()
+    assert cfg.disabled
+    assert cfg.auth_failed is (error_type is ClientAuthenticationError)
+    assert cfg.client == {}
+    assert "private-error-marker" not in caplog.text
+    with pytest.raises(Exception, match="AGENTLZ_REQUIRED not found"):
+        cfg.get("AGENTLZ_REQUIRED")
+
+
+def test_write_rejects_uninitialized_credentials(monkeypatch, mock_identity_manager):
+    cfg, _ = _client(monkeypatch, mock_identity_manager, {})
+    cfg.credential = None
+    with (
+        patch("connectors.appconfig.AzureAppConfigurationClient") as write_client,
+        pytest.raises(RuntimeError, match="credentials are not initialized"),
+    ):
+        cfg.set_value("AGENTLZ_TEST", "value")
+    write_client.assert_not_called()
 
 
 @pytest.mark.parametrize("key", ["AGENTLZ_FOO", "GPT_RAG_FOO", "SEARCH_SERVICE_NAME"])
@@ -69,4 +157,4 @@ def test_telemetry_service_name_uses_agentlz_prefix():
     assert len(calls) == 1
     service_name = calls[0].args[2]
     assert isinstance(service_name, ast.Constant) and service_name.value == "agentlz.orchestrator"
-    assert constants.APP_NAME == "gpt-rag-orchestrator"
+    assert constants.APP_NAME == "agent-app-orchestrator"

@@ -984,7 +984,7 @@ def create_app(
 
     hosted_app = HostedResponsesAgentServerHost(
         options=ResponsesServerOptions(
-            additional_server_version=f"gpt-rag-orchestrator/{_APP_VERSION}",
+            additional_server_version=f"agent-app-orchestrator/{_APP_VERSION}",
         ),
         store=store,
         routes=[

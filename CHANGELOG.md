@@ -1,5 +1,20 @@
 # Changelog
 
+## [v5.2.1] - 2026-10-14
+
+### Fixed
+
+- **Configuration label isolation.** Use the explicit null-label selector
+  instead of the wildcard so UI-specific secret references are not selected
+  by the orchestrator; existing service-label precedence is preserved.
+
+### Added
+
+- **Opt-in configuration TLS compatibility.** `APP_CONFIG_TLS_COMPATIBILITY=true`
+  enables verified P-256/TCP MSS 1200 transports only for the App Configuration
+  endpoint and the Key Vault supplied by `KEY_VAULT_URI`; the default SDK
+  transport, authentication and certificate validation remain unchanged.
+
 ## [v5.2.0] - 2026-10-06
 
 ### Removed

@@ -1,6 +1,6 @@
-name: azure-gpt-rag
+name: agent-landing-zone
 metadata:
-  template: azure-gpt-rag-orchestrator
+  template: agent-app-orchestrator
 infra:
   provider: bicep
   path: infra
