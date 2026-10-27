@@ -1,22 +1,14 @@
-# Evaluations (deprecated)
+# Evaluations (deprecated folder)
 
-The standalone evaluation scripts that used to live in this folder have been
-removed. Evaluation for Agent Landing Zone agents now runs through the AgentOps Accelerator,
-which scores the live orchestrator endpoint with Foundry's built-in evaluators and
-turns the result into a pull request gate.
+This folder contains no maintained standalone evaluation runner.
+The repository's Python tests are under [`tests/`](../tests/).
 
-## Where evaluation lives now
+For optional evaluation workflow setup, see the external
+[AgentOps HTTP agent tutorial](https://azure.github.io/agentops/tutorial-http-agent/).
+Adopting that workflow requires its own dataset, endpoint, credentials, and
+gate configuration. This repository does not enable an AgentOps pull-request
+gate merely by linking to the tutorial.
 
-- End-to-end evaluation workflow (dataset, evaluators, PR and dev gates):
-  [AgentOps HTTP agent tutorial](https://azure.github.io/agentops/tutorial-http-agent/).
-- Retrieval tuning with the Document Retrieval evaluator and ranking metrics:
-  [Agent Landing Zone retrieval configuration](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/configuration/#retrieval).
-
-## Why it changed
-
-The old folder ran a one-off batch evaluation against a golden dataset and printed
-a Foundry Studio link. AgentOps replaces that with a repeatable workflow: it builds
-its own evaluation dataset, runs the evaluators against the deployed endpoint, and
-fails the build when scores drop. Keeping a second, divergent harness here only
-added drift, so evaluation is consolidated in one place.
-
+Product guidance belongs in the
+[Agent Landing Zone documentation](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/),
+maintained in the [canonical main-branch source](https://github.com/Azure/AI-Landing-Zones/tree/main/docs/agent-landing-zone).
