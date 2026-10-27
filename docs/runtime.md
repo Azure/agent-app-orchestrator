@@ -4,7 +4,8 @@ Return to the [service README](../README.md). Product deployment and shared
 configuration are owned by the
 [central documentation](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/)
 and its [main-branch source](https://github.com/Azure/AI-Landing-Zones/tree/main/docs/agent-landing-zone).
-This guide describes orchestrator `v5.2.1`, the Agent Landing Zone `4.3.0` pin.
+This guide describes orchestrator `v5.2.2`. Use the platform release manifest
+for the compatible component combination.
 
 Operator setup: [dashboard Entra registration](#dashboard-entra-setup),
 [classic MCP](#classic-mcp-strategy),
@@ -451,7 +452,7 @@ compatible release pins and separately authorized data/configuration recovery.
 
 ## Component image build selection
 
-The shipped `v5.2.1` [PowerShell](../scripts/deploy.ps1) and
+The `v5.2.2` [PowerShell](../scripts/deploy.ps1) and
 [Bash](../scripts/deploy.sh) deployment hooks accept `BUILD_MODE=local` or
 `BUILD_MODE=acr-task`, normalized for case and surrounding whitespace.
 An unset value does **not** unconditionally mean remote ACR Tasks:
@@ -476,3 +477,8 @@ remote. Local builds use `linux/amd64`, then push to ACR. `acr-task` uses
 `ACR_TASK_AGENT_POOL`, otherwise selection fails. This documents component
 behavior, not a standalone deployment recipe or an assertion that a parent
 hook sets `BUILD_MODE`.
+
+Deployment destinations use `AZURE_APP_RESOURCE_GROUP` from App Configuration
+under `agent-lz`. Only a successful missing or empty read falls back to
+`AZURE_RESOURCE_GROUP` for older environments. Configuration access failures
+or multiple destination values stop deployment rather than select another group.
