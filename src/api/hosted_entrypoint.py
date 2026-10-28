@@ -39,7 +39,7 @@ import logging
 import os
 import time
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import suppress
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Literal, Optional, Sequence, cast
@@ -63,6 +63,7 @@ from starlette.routing import Route
 
 from api.responses_adapter import responses_terminal_events, serialize_responses_events
 from dependencies import get_config
+from connectors.obo import HostedRetrievalError, resolve_hosted_retrieval
 from orchestration.turn import (
     TurnCancelledEvent,
     TurnCitationEvent,
@@ -189,6 +190,7 @@ async def _hosted_stream(
         strategy.set_context(conversation_id)
 
     strategy.user_context = {}
+    strategy.delegated_retrieval = turn.delegated_retrieval
     strategy.foundry_call_id = turn.foundry_call_id
     strategy.conversation = build_hosted_conversation(
         strategy_key,
@@ -211,9 +213,19 @@ async def _hosted_stream(
     except asyncio.CancelledError:
         yield TurnCancelledEvent()
         raise
+    except HostedRetrievalError as exc:
+        strategy.delegated_retrieval = None
+        yield TurnErrorEvent(
+            message=str(exc), code=exc.code,
+            claims_challenge=exc.claims_challenge,
+        )
+        raise
     except Exception:
         yield TurnErrorEvent()
         raise
+    finally:
+        # Strategy instances/providers are per turn; never retain bearer material.
+        strategy.delegated_retrieval = None
 
 
 def _sse_generator(
@@ -368,6 +380,13 @@ async def _create_hosted_streaming_response(
         except MissingFoundryCallContextError as exc:
             raise HTTPException(status_code=401, detail=str(exc)) from exc
 
+    try:
+        delegated = (
+            resolve_hosted_retrieval(cfg, request.headers, conversation_id)
+            if strategy_key not in HOSTED_TOOLBOX_STRATEGIES else None
+        )
+    except HostedRetrievalError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
     metadata = metadata or {}
     turn = TurnRequest(
         ask=ask,
@@ -376,6 +395,7 @@ async def _create_hosted_streaming_response(
         user_context={},
         correlation_id=metadata.get("correlation_id"),
         foundry_call_id=foundry_call_id,
+        delegated_retrieval=delegated,
     )
 
     response_id = f"resp_{uuid.uuid4().hex}"
@@ -566,7 +586,7 @@ async def _cancel_aware_events(
     events: AsyncIterator[TurnOutputEvent],
     cancellation_signal: asyncio.Event,
     shutdown_signal: asyncio.Event,
-) -> AsyncIterator[TurnOutputEvent]:
+) -> AsyncGenerator[TurnOutputEvent, None]:
     """Stop and close in-flight strategy work on cancellation or shutdown."""
     iterator = events.__aiter__()
     active_tasks: set[asyncio.Task[Any]] = set()
@@ -644,6 +664,15 @@ async def _responses_events(
     strategy_key = cfg.get("AGENT_STRATEGY", "maf_lite")
     guard_hosted_strategy(strategy_key)
 
+    # Defense in depth: no bearer-bearing handler may execute on SDK recovery.
+    if context.mode_flags.store or context.mode_flags.background or context.is_recovery:
+        raise HostedRetrievalError("Hosted retrieval requires ephemeral foreground execution", 503)
+    metadata = request.get("metadata")
+    conversation_id = metadata.get("conversation_id") if metadata else None
+    delegated = (
+        resolve_hosted_retrieval(cfg, context.client_headers, conversation_id)
+        if strategy_key not in HOSTED_TOOLBOX_STRATEGIES else None
+    )
     foundry_call_id: Optional[str] = None
     if strategy_key in HOSTED_TOOLBOX_STRATEGIES:
         platform_call_id = context.platform_context.call_id
@@ -654,14 +683,16 @@ async def _responses_events(
         )
         foundry_call_id = require_foundry_call_id(headers)
 
-    metadata = request.get("metadata")
     turn = TurnRequest(
         ask=ask,
-        conversation_id=None,
+        # An authorized BFF label is only an additional retrieval filter. It
+        # never resolves managed history or grants source access by itself.
+        conversation_id=conversation_id if delegated is not None else None,
         question_id=metadata.get("question_id") if metadata else None,
         user_context={},
         correlation_id=metadata.get("correlation_id") if metadata else None,
         foundry_call_id=foundry_call_id,
+        delegated_retrieval=delegated,
     )
 
     response_stream: ResponseEventStream | None = None
@@ -669,11 +700,12 @@ async def _responses_events(
     text_content = None
     full_text: list[str] = []
 
-    async for event in _cancel_aware_events(
+    events = _cancel_aware_events(
         _hosted_stream(turn, strategy_key, history),
         cancellation_signal,
         context.shutdown,
-    ):
+    )
+    async for event in events:
         if isinstance(event, TurnConversationEvent):
             response_stream = ResponseEventStream(
                 response_id=context.response_id,
@@ -694,6 +726,18 @@ async def _responses_events(
             full_text.append(event.text)
             yield text_content.emit_delta(event.text)
         elif isinstance(event, TurnErrorEvent):
+            if event.code in {
+                "authentication_required", "interaction_required", "source_denied",
+            } and response_stream is not None:
+                failed = response_stream.emit_failed(
+                    code=event.code, message=event.message,
+                )
+                failed["response"]["error"]["retryable"] = False
+                if event.claims_challenge is not None:
+                    failed["response"]["error"]["claims_challenge"] = event.claims_challenge
+                await events.aclose()
+                yield failed
+                return
             raise RuntimeError(event.message)
         elif isinstance(event, TurnCancelledEvent):
             cancellation_signal.set()
@@ -878,6 +922,13 @@ class HostedResponsesAgentServerHost(ResponsesAgentServerHost):
                 return reject(
                     "Responses metadata must contain only string keys and values."
                 )
+            call_context_error = self._call_context_error(
+                request,
+                conversation_id=metadata.get("conversation_id") if metadata else None,
+                validate_conversation=True,
+            )
+            if call_context_error is not None:
+                return call_context_error
 
             # The pinned SDK requires ``store: true`` whenever ``background:
             # true`` is requested (a queued/polled response is meaningless if
@@ -930,9 +981,20 @@ class HostedResponsesAgentServerHost(ResponsesAgentServerHost):
         return validated
 
     @staticmethod
-    def _call_context_error(request: Request) -> JSONResponse | None:
-        strategy_key = get_config().get("AGENT_STRATEGY", "maf_lite")
+    def _call_context_error(
+        request: Request, *, conversation_id: str | None = None,
+        validate_conversation: bool = False,
+    ) -> JSONResponse | None:
+        cfg = get_config()
+        strategy_key = cfg.get("AGENT_STRATEGY", "maf_lite")
         if strategy_key not in HOSTED_TOOLBOX_STRATEGIES:
+            try:
+                resolve_hosted_retrieval(
+                    cfg, request.headers, conversation_id,
+                    validate_conversation=validate_conversation,
+                )
+            except HostedRetrievalError as exc:
+                return JSONResponse({"detail": str(exc)}, status_code=exc.status_code)
             return None
         try:
             require_foundry_call_id(request.headers)
@@ -976,6 +1038,16 @@ def create_app(
     configure_observability: Any = _DEFAULT_OBSERVABILITY,
 ) -> HostedResponsesAgentServerHost:
     """Create the multi-protocol hosted app with injectable test boundaries."""
+    # Apply before SDK instrumentation is configured. Even an operator enabling
+    # capture of all HTTP headers must not export forwarded credentials.
+    sanitize_key = "OTEL_INSTRUMENTATION_HTTP_CAPTURE_HEADERS_SANITIZE_FIELDS"
+    fields = [item for item in os.environ.get(sanitize_key, "").split(",") if item]
+    for name in (
+        "authorization", "x-client-.*", "x-ms-query.*authorization", "x-agent-foundry-call-id",
+    ):
+        if name not in fields:
+            fields.append(name)
+    os.environ[sanitize_key] = ",".join(fields)
     host_options: dict[str, Any] = {}
     if configure_observability is _DEFAULT_OBSERVABILITY:
         host_options["configure_observability"] = _configure_host_observability
@@ -985,6 +1057,10 @@ def create_app(
     hosted_app = HostedResponsesAgentServerHost(
         options=ResponsesServerOptions(
             additional_server_version=f"agent-app-orchestrator/{_APP_VERSION}",
+            # store=false below is essential even for foreground SDK requests:
+            # store=true streams persist client_headers as resilient-task input.
+            resilient_background=False,
+            steerable_conversations=False,
         ),
         store=store,
         routes=[

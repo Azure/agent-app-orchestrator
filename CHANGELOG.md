@@ -1,5 +1,32 @@
 # Changelog
 
+## [v5.3.0] - 2026-10-28
+
+### Added
+
+- **Native per-user Search permissions.** Protected retrieval forwards the
+  delegated Search credential to native permission enforcement for indexed and
+  remote knowledge sources, preserving conversation-upload scope without
+  constructing manual group authorization or granting blob download access.
+- **Official hosted forwarded credentials.** Both `/responses` and
+  `/invocations` accept the explicit forwarded Search credential. Work IQ uses
+  its separately registered application assertion; platform partition ids,
+  request-body identity and Search tokens do not substitute for that assertion.
+- **Bounded downstream claims recovery.** Search authentication challenges
+  carry only canonical, validated claims through the existing failed-turn
+  contract in both hosted adapters. Ambiguous or malformed challenges do not
+  initiate claims recovery, and authentication failures are non-retryable.
+
+### Changed
+
+- **Request-local credential lifecycle.** Immutable delegated credentials are
+  isolated across concurrent requests and cleared after the turn. Token-bearing
+  hosted Responses requests avoid SDK persistence and resilient replay;
+  background execution is rejected, and credential headers are sanitized.
+- **Manual-only dev deployment.** Updating `develop` no longer deploys to
+  Azure. The dev deployment workflow runs only through an explicitly authorized
+  manual dispatch.
+
 ## [v5.2.2] - 2026-10-27
 
 ### Fixed

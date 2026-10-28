@@ -35,6 +35,11 @@ from opentelemetry.trace.propagation.tracecontext import (
 )
 
 from dependencies import get_config
+from connectors.obo import (
+    HostedRetrievalError,
+    validate_indexed_sharepoint_configuration,
+    validate_work_iq_configuration,
+)
 from telemetry import (
     AuditEmitter,
     AuditStatus,
@@ -59,6 +64,9 @@ from connectors.foundry_iq_mcp import (
 # Core retrieval is GA at 2026-04-01, but we pin the preview so the security
 # features are always available. Override via the FOUNDRY_IQ_API_VERSION key.
 DEFAULT_FOUNDRY_IQ_API_VERSION = "2026-05-01-preview"
+NATIVE_PERMISSION_API_VERSIONS = frozenset(
+    {DEFAULT_FOUNDRY_IQ_API_VERSION, "2026-08-01-preview"}
+)
 
 
 class _FoundryIQRecord(dict[str, str]):
@@ -184,8 +192,9 @@ ONELAKE_LAKEHOUSE_ID_KEY = "ONELAKE_LAKEHOUSE_ID"
 # - No maxRuntimeInSeconds bump is needed. Retrieve reads a local index and
 #   is fast; only the remote kinds (workIQ, fabricOntology, fabricDataAgent)
 #   need the extended runtime ceiling.
-# - ACL trimming and per-user site-group enforcement are out of scope for
-#   this preview; document-level security stays app-only.
+# - In native_search, August ingestion emits userIds/groupIds permissions.
+#   Ingestion's app/FIC credentials never authorize query data: the delegated
+#   Search token is mandatory and Search enforces the indexed user/group ACLs.
 SHAREPOINT_INDEXED_ENABLED_KEY = "SHAREPOINT_INDEXED_ENABLED"
 SHAREPOINT_INDEXED_KNOWLEDGE_SOURCE_NAME_KEY = "SHAREPOINT_INDEXED_KNOWLEDGE_SOURCE_NAME"
 SHAREPOINT_INDEXED_INDEX_NAME_KEY = "SHAREPOINT_INDEXED_INDEX_NAME"
@@ -244,10 +253,21 @@ def _resolve_conversation_owner_id(user_context: Any) -> Optional[str]:
 
 
 def _build_conversation_owner_clause(
-    conversation_id: Optional[str], owner_id: Optional[str]
+    conversation_id: Optional[str], owner_id: Optional[str], *, native_permissions: bool = False,
 ) -> Optional[str]:
     """Build the clause matching conversation uploads stamped for ``owner_id``."""
     cid = (conversation_id or "").strip()
+    if native_permissions:
+        if not cid or cid == "NaN":
+            raise ValueError("Protected upload retrieval requires a conversation ID")
+        # Pinned ingestion stamps uploader-only ACLs. Search evaluates the
+        # actual user IDs; this clause only rejects unknown/empty upload shapes.
+        return (
+            f"(conversationId eq '{_odata_escape_string(cid)}'"
+            f" and {_CONVERSATION_OWNER_FIELD}/any()"
+            " and not metadata_security_group_ids/any()"
+            " and (metadata_security_rbac_scope eq '' or metadata_security_rbac_scope eq null))"
+        )
     owner = (owner_id or "").strip()
     if not cid or not owner:
         return None
@@ -261,11 +281,13 @@ def _build_conversation_owner_clause(
 
 
 def _build_conversation_filter(
-    conversation_id: Optional[str], owner_id: Optional[str]
+    conversation_id: Optional[str], owner_id: Optional[str], *, native_permissions: bool = False,
 ) -> str:
     """Owner-scoped conversation uploads plus the shared corpus."""
     shared_clause = "(conversationId eq 'NaN' or conversationId eq null)"
-    owned_clause = _build_conversation_owner_clause(conversation_id, owner_id)
+    owned_clause = _build_conversation_owner_clause(
+        conversation_id, owner_id, native_permissions=native_permissions,
+    )
     if owned_clause:
         return f"{owned_clause} or {shared_clause}"
     return shared_clause
@@ -563,7 +585,8 @@ class FoundryIQClient:
             self.cfg.get(SHAREPOINT_INDEXED_ENABLED_KEY, False, type=bool)
         )
         self.sharepoint_indexed_knowledge_source_name = (
-            self.cfg.get(SHAREPOINT_INDEXED_KNOWLEDGE_SOURCE_NAME_KEY, "") or ""
+            self.cfg.get(SHAREPOINT_INDEXED_KNOWLEDGE_SOURCE_NAME_KEY, "")
+            or self.cfg.get("SHAREPOINT_INDEXED_KS_NAME", "") or ""
         ).strip()
         self.sharepoint_indexed_index_name = (
             self.cfg.get(SHAREPOINT_INDEXED_INDEX_NAME_KEY, "") or ""
@@ -642,6 +665,24 @@ class FoundryIQClient:
         through to the generic azureBlob / searchIndex path (which would
         otherwise emit a ``reference`` title and no link).
         """
+        if isinstance(source.get("parts"), list):
+            texts: list[str] = []
+            link = ""
+            for part in source["parts"]:
+                if not isinstance(part, Mapping):
+                    continue
+                if isinstance(part.get("text"), str):
+                    texts.append(part["text"])
+                if part.get("mediaType") == "application/vnd.ms-workiq-reference":
+                    data = part.get("data")
+                    if isinstance(data, Mapping):
+                        for citation in data.values():
+                            if isinstance(citation, Mapping) and not citation.get("isSourceFiltered"):
+                                target = citation.get("targetLink")
+                                if isinstance(target, str) and not link:
+                                    link = target
+            content = "\n\n".join(texts).strip()
+            return {"title": "Work IQ reference", "link": link, "content": content} if content else None
         attributions = source.get("attributions") or []
         extracts = source.get("extracts") or []
         if not attributions and not extracts:
@@ -751,13 +792,22 @@ class FoundryIQClient:
         deep link, so ``link`` is left empty and the citation title falls
         back to the workspace / data agent identifiers.
         """
-        answer = source.get("dataAgentAnswer")
+        answer = source.get("fabricAnswer") or source.get("dataAgentAnswer")
         raw = source.get("dataAgentRawData")
         parts: List[str] = []
         if isinstance(answer, str) and answer.strip():
             parts.append(answer.strip())
         if isinstance(raw, str) and raw.strip():
             parts.append(raw.strip())
+        for resource in source.get("fabricEmbeddedResources") or []:
+            if not isinstance(resource, Mapping):
+                continue
+            # Hosted adapters are text-only. Do not fetch embedded resources,
+            # decode chart bytes, or create download grants from tool output.
+            if resource.get("mimeType") in {"text/csv", "text/plain", "application/json"}:
+                content = resource.get("content")
+                if isinstance(content, str) and content.strip():
+                    parts.append(content.strip())
         if not parts:
             return None
         content = "\n\n".join(parts)
@@ -909,6 +959,8 @@ class FoundryIQClient:
         - ``title`` prefers a human-readable label (``title`` / ``name`` /
           ``fileName``) and falls back to the SharePoint link tail so
           citations don't surface an opaque ``driveItemId``.
+        - Existing SharePoint index projections ``metadata_spo_item_weburi``
+          and ``metadata_spo_item_name`` retain their original deep link/title.
 
         Returns ``None`` when the payload has no usable content so the caller
         can skip empty hits rather than emit a bare ``reference`` title. The
@@ -932,7 +984,9 @@ class FoundryIQClient:
         # camelCase and lowerCase spellings are accepted defensively since
         # the exact projection is not documented.
         link = (
-            source.get("webUrl")
+            source.get("metadata_spo_item_weburi")
+            or source.get("metadata_spo_item_path")
+            or source.get("webUrl")
             or source.get("web_url")
             or source.get("webPath")
             or source.get("siteUrl")
@@ -945,7 +999,8 @@ class FoundryIQClient:
         )
 
         title = (
-            source.get("title")
+            source.get("metadata_spo_item_name")
+            or source.get("title")
             or source.get("name")
             or source.get("fileName")
             or source.get("filename")
@@ -1142,11 +1197,14 @@ class FoundryIQClient:
                 web_record = cls._normalize_web_reference(source)
                 append_record(web_record, "web")
                 continue
+            if ref_type == "indexedsharepoint":
+                append_record(cls._normalize_sharepoint_indexed_reference(source), "indexedSharePoint")
+                continue
 
             # Fabric Data Agent shape (fabricDataAgent): distinct fields,
             # no overlap with fabricOntology / workIQ.
-            if source.get("dataAgentAnswer") or source.get("dataAgentRawData"):
-                data_agent_record = cls._normalize_fabric_data_agent_reference(source)
+            if ref_type == "fabricdataagent" or source.get("dataAgentAnswer") or source.get("dataAgentRawData"):
+                data_agent_record = cls._normalize_fabric_data_agent_reference({**ref, **source})
                 append_record(data_agent_record, "fabricDataAgent")
                 continue
 
@@ -1163,12 +1221,12 @@ class FoundryIQClient:
             # Fabric IQ shape (fabricOntology): distinct fields, no
             # attributions/extracts overlap with Work IQ.
             if source.get("fabricAnswer") or source.get("fabricRawData"):
-                fabric_record = cls._normalize_fabric_iq_reference(source)
+                fabric_record = cls._normalize_fabric_iq_reference({**ref, **source})
                 append_record(fabric_record, "fabricOntology")
                 continue
 
             # Work IQ shape (workIQ): attributions + extracts.
-            if source.get("attributions") or source.get("extracts"):
+            if ref_type == "workiq" or source.get("attributions") or source.get("extracts"):
                 record = cls._normalize_work_iq_reference(source)
                 append_record(record, "workIQ")
                 continue
@@ -1196,7 +1254,9 @@ class FoundryIQClient:
             # (resourceMetadata / extracts). SharePoint Indexed is
             # identified by webUrl / webPath / siteUrl / driveItemId.
             if (
-                source.get("webUrl")
+                source.get("metadata_spo_item_weburi")
+                or source.get("metadata_spo_item_path")
+                or source.get("webUrl")
                 or source.get("webPath")
                 or source.get("siteUrl")
                 or source.get("driveItemId")
@@ -1250,6 +1310,7 @@ class FoundryIQClient:
         *,
         conversation_id: Optional[str],
         user_context: Optional[Mapping[str, Any]],
+        native_permissions: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """Build the sidecar searchIndex source that carries runtime uploads.
 
@@ -1260,12 +1321,14 @@ class FoundryIQClient:
           already trims its single searchIndex source by conversationId), or
         - no conversation knowledge source name was provisioned.
 
-        When it does apply, the source is a ``searchIndex`` knowledge source over
-        the existing Agent Landing Zone index, always trimmed by a conversationId plus
-        caller-ownership ``filterAddOn``; it is skipped when the caller
-        principal is unknown. ``failOnError`` is ``false`` so
-        an empty or missing upload index degrades gracefully to the shared corpus
-        instead of failing the whole retrieve.
+        In native mode the source is mandatory, scoped to a supplied
+        conversation and the pinned uploader-only ACL row shape. Search matches
+        those userIds permissions using the delegated Search token; no oid is
+        extracted here. Native retrieve preflight rejects incomplete scope/name
+        before transport and forces failOnError/alwaysQuerySource.
+
+        Classic mode retains its explicit owner filter and optional sidecar
+        compatibility behavior.
         """
         if not self.conversation_upload_enabled:
             return None
@@ -1287,14 +1350,17 @@ class FoundryIQClient:
                 "conversation_id is empty; skipping the file-upload sidecar source."
             )
             return None
-        if self.api_version != DEFAULT_FOUNDRY_IQ_API_VERSION:
+        if self.api_version not in NATIVE_PERMISSION_API_VERSIONS:
             raise ValueError(
                 "Foundry IQ conversation-upload filterAddOn requires "
                 f"{DEFAULT_FOUNDRY_IQ_API_VERSION}; current "
                 f"FOUNDRY_IQ_API_VERSION={self.api_version}."
             )
-        filter_add_on = build_conversation_upload_filter_add_on(
-            cid, _resolve_conversation_owner_id(user_context)
+        filter_add_on = (
+            _build_conversation_owner_clause(cid, None, native_permissions=True)
+            if native_permissions else build_conversation_upload_filter_add_on(
+                cid, _resolve_conversation_owner_id(user_context)
+            )
         )
         if not filter_add_on:
             logging.warning(
@@ -1307,7 +1373,7 @@ class FoundryIQClient:
             "kind": "searchIndex",
             "includeReferences": True,
             "includeReferenceSourceData": True,
-            "failOnError": False,
+            "failOnError": native_permissions,
             "filterAddOn": filter_add_on,
         }
         logging.info(
@@ -1556,10 +1622,10 @@ class FoundryIQClient:
 
         Unlike the remote workIQ / fabric* kinds, ``indexedSharePoint`` is a
         server-side knowledge source registered on the AI Search service.
-        Auth to SharePoint is baked into the KS ``connectionString`` at
-        registration time via a Federated Identity Credential (managed
-        identity + Graph ``Sites.Selected`` app-only permission), so no
-        per-request OBO token is required. Retrieve reads a pre-built local
+        Ingestion auth is baked into the KS ``connectionString`` at
+        registration time via a Federated Identity Credential. This is not
+        query authorization: native_search requires the delegated Search token
+        and userIds/groupIds permission ingestion. Retrieve reads a pre-built local
         index and is fast, so this KS does not participate in
         :meth:`_remote_kinds_enabled` and does not lift
         ``maxRuntimeInSeconds``.
@@ -1576,7 +1642,7 @@ class FoundryIQClient:
 
         logging.info(
             "[FoundryIQClient][SharePointIndexed] Adding indexedSharePoint "
-            "source %s (server-side KS, app-only auth via FIC)",
+            "source %s (server-side index; ingestion auth separate from query ACLs)",
             self.sharepoint_indexed_knowledge_source_name,
         )
         return {
@@ -1845,6 +1911,8 @@ class FoundryIQClient:
         incoming_token: Optional[str] = None,
         conversation_id: Optional[str] = None,
         user_context: Optional[Mapping[str, Any]] = None,
+        native_permissions: bool = False,
+        work_iq_assertion: Optional[str] = None,
     ) -> List[Dict[str, str]]:
         """Run the knowledge base retrieve action and return normalized records.
 
@@ -1864,6 +1932,45 @@ class FoundryIQClient:
             use ``obo_token`` and the ``x-ms-query-source-authorization`` header.
         :return: A list of ``{title, link, content}`` records.
         """
+        if native_permissions:
+            if not obo_token:
+                raise ValueError("Protected retrieval requires a delegated Search token")
+            if self.api_version not in NATIVE_PERMISSION_API_VERSIONS:
+                raise ValueError("Unsupported native permission retrieval API version")
+            if not self.knowledge_source_name:
+                raise ValueError("Protected retrieval requires a provisioned primary source")
+            if self.knowledge_source_kind not in {"azureBlob", "searchIndex"}:
+                raise ValueError("Unsupported protected primary knowledge source kind")
+            if self.mcp_config.enabled:
+                raise ValueError("Protected MCP source delegation is not configured")
+            for enabled, name in (
+                (self.work_iq_enabled, self.work_iq_knowledge_source_name),
+                (self.fabric_iq_enabled, self.fabric_iq_knowledge_source_name),
+                (self.fabric_data_agent_enabled, self.fabric_data_agent_knowledge_source_name),
+                (self.sharepoint_remote_enabled, self.sharepoint_remote_knowledge_source_name),
+                (self.sharepoint_indexed_enabled, self.sharepoint_indexed_knowledge_source_name),
+                (self.onelake_ks_enabled, self.onelake_knowledge_source_name),
+                (self.web_grounding_enabled, self.web_grounding_knowledge_source_name),
+            ):
+                if enabled and not name:
+                    raise ValueError("Enabled knowledge source has no provisioned name")
+            if self.onelake_ks_enabled:
+                raise ValueError("Indexed remote source permission ingestion is not verified")
+            if self.sharepoint_indexed_enabled:
+                validate_indexed_sharepoint_configuration(self.cfg)
+            if self.work_iq_enabled and not work_iq_assertion:
+                raise ValueError("Work IQ requires its app-audience user assertion")
+            if (
+                self.work_iq_enabled or self.fabric_iq_enabled or self.fabric_data_agent_enabled
+            ) and self.api_version != "2026-08-01-preview":
+                raise ValueError("Configured remote sources require 2026-08-01-preview")
+            if self.work_iq_enabled:
+                validate_work_iq_configuration(self.cfg)
+            if self.conversation_upload_enabled or self.knowledge_source_kind == "searchIndex":
+                _build_conversation_owner_clause(conversation_id, None, native_permissions=True)
+                if self.knowledge_source_kind == "azureBlob" and not self.conversation_knowledge_source_name:
+                    raise ValueError("Protected upload source requires a provisioned sidecar name")
+
         url = self._retrieve_url()
         start = time.time()
 
@@ -1899,6 +2006,8 @@ class FoundryIQClient:
                 "[FoundryIQClient][Trimming] x-ms-query-source-authorization=absent "
                 "reason=no OBO token"
             )
+        if work_iq_assertion:
+            headers["x-ms-query-work-iq-source-authorization"] = work_iq_assertion
 
         if self.mcp_config.enabled:
             # Local imports avoid the existing search -> foundry_iq dependency
@@ -1932,8 +2041,11 @@ class FoundryIQClient:
             logging.debug("[FoundryIQClient] conversation_id=%s", conversation_id)
 
         # Agent Landing Zone configures the knowledge base with minimal reasoning, which
-        # requires explicit intents rather than chat messages.
-        if self.mcp_config.enabled:
+        # requires explicit intents rather than chat messages. Fabric's
+        # model-backed remote retrieval instead requires low reasoning/messages.
+        if self.mcp_config.enabled or (
+            native_permissions and (self.fabric_iq_enabled or self.fabric_data_agent_enabled)
+        ):
             body: Dict[str, Any] = {
                 "messages": [
                     {
@@ -1942,7 +2054,7 @@ class FoundryIQClient:
                     }
                 ],
                 "retrievalReasoningEffort": {
-                    "kind": self.mcp_config.reasoning_effort
+                    "kind": self.mcp_config.reasoning_effort if self.mcp_config.enabled else "low"
                 },
                 "outputMode": "extractiveData",
                 "includeActivity": True,
@@ -1967,13 +2079,19 @@ class FoundryIQClient:
                 "includeReferences": True,
                 "includeReferenceSourceData": True,
             }
-            if self.filter_add_on_enabled:
+            if native_permissions and self.knowledge_source_kind == "searchIndex":
+                # ACLs are enforced by Search's annotated permission fields.
+                # This independent filter only restricts conversation uploads.
+                source_params["filterAddOn"] = _build_conversation_filter(
+                    conversation_id, None, native_permissions=True,
+                )
+            elif self.filter_add_on_enabled:
                 if self.knowledge_source_kind != "searchIndex":
                     raise ValueError(
                         "Foundry IQ filterAddOn is only valid for searchIndex knowledge sources; "
                         f"current kind={self.knowledge_source_kind}."
                     )
-                if self.api_version != DEFAULT_FOUNDRY_IQ_API_VERSION:
+                if self.api_version not in NATIVE_PERMISSION_API_VERSIONS:
                     raise ValueError(
                         "Foundry IQ Pattern B filterAddOn requires "
                         f"{DEFAULT_FOUNDRY_IQ_API_VERSION}; current "
@@ -1993,11 +2111,14 @@ class FoundryIQClient:
         conversation_source_params = self._build_conversation_source_params(
             conversation_id=conversation_id,
             user_context=user_context,
+            **({"native_permissions": True} if native_permissions else {}),
         )
         if conversation_source_params:
             knowledge_source_params.append(conversation_source_params)
 
-        work_iq_source_params = self._build_work_iq_source_params(obo_token=obo_token)
+        work_iq_source_params = self._build_work_iq_source_params(
+            obo_token=work_iq_assertion if native_permissions else obo_token
+        )
         if work_iq_source_params:
             knowledge_source_params.append(work_iq_source_params)
 
@@ -2021,7 +2142,7 @@ class FoundryIQClient:
         if onelake_source_params:
             knowledge_source_params.append(onelake_source_params)
 
-        # SharePoint Indexed is a server-side KS on AI Search: no OBO required.
+        # Indexed SharePoint ingestion identity never substitutes for query ACLs.
         sharepoint_indexed_source_params = self._build_sharepoint_indexed_source_params()
         if sharepoint_indexed_source_params:
             knowledge_source_params.append(sharepoint_indexed_source_params)
@@ -2036,6 +2157,10 @@ class FoundryIQClient:
             )
 
         if knowledge_source_params:
+            if native_permissions:
+                for params in knowledge_source_params:
+                    params["failOnError"] = True
+                    params["alwaysQuerySource"] = True
             body["knowledgeSourceParams"] = knowledge_source_params
 
         # Remote kinds (workIQ, future fabric*) can take 40-60s to fan out.
@@ -2049,6 +2174,12 @@ class FoundryIQClient:
         try:
             async with session.post(url, headers=headers, json=body) as resp:
                 response_status = resp.status
+                if native_permissions and resp.status in (401, 403):
+                    auth_error = HostedRetrievalError.from_response(
+                        resp.status, resp.headers.items(),
+                    )
+                    if auth_error is not None:
+                        raise auth_error
                 await resp.text()
                 if resp.status >= 400:
                     if self.mcp_config.enabled:
@@ -2068,12 +2199,26 @@ class FoundryIQClient:
         except McpSourceError:
             raise
         except Exception as exc:
+            if native_permissions:
+                if isinstance(exc, HostedRetrievalError):
+                    raise
+                raise RuntimeError("Protected knowledge retrieval failed") from None
             if self.mcp_config.enabled:
                 raise McpSourceError(
                     "Foundry IQ MCP retrieve request failed"
                 ) from exc
             raise
 
+        if native_permissions and (
+            response_status != 200
+            or payload.get("error")
+            or any(
+                item.get("error") or item.get("errors")
+                for item in payload.get("activity", [])
+                if isinstance(item, dict)
+            )
+        ):
+            raise RuntimeError("A required protected knowledge source failed")
         if self.mcp_config.enabled:
             self._handle_mcp_activity(payload, http_status=response_status)
         records = self._normalize_references(payload)

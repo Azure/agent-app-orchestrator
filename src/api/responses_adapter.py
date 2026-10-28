@@ -170,6 +170,17 @@ def serialize_responses_events(
         return []
 
     if isinstance(event, TurnErrorEvent):
+        authentication = (
+            {"retryable": False}
+            if event.code in {
+                "authentication_required", "interaction_required", "source_denied",
+            } else {}
+        )
+        recovery = (
+            {"claims_challenge": event.claims_challenge}
+            if event.code == "interaction_required" and event.claims_challenge is not None
+            else {}
+        )
         return [
             _sse(
                 "error",
@@ -179,6 +190,8 @@ def serialize_responses_events(
                     "code": event.code,
                     "message": event.message,
                     "param": None,
+                    **authentication,
+                    **recovery,
                 },
             )
         ]

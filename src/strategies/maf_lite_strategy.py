@@ -226,6 +226,8 @@ class MafLiteStrategy(BaseAgentStrategy):
     # Search provider (optional agentic retrieval)
     # ------------------------------------------------------------------
     async def _create_search_provider(self) -> Optional[SearchContextProvider]:
+        if not self.cfg.get("SEARCH_RETRIEVAL_ENABLED", True, type=bool):
+            return None
         if not self.search_endpoint:
             logging.debug("[MafLiteStrategy] No search endpoint configured, skipping search")
             return None
@@ -242,6 +244,9 @@ class MafLiteStrategy(BaseAgentStrategy):
             )
             retrieval_backend = get_retrieval_backend()
             token = getattr(self, "request_access_token", None)
+            delegated = getattr(self, "delegated_retrieval", None)
+            if delegated is not None:
+                allow_anonymous = False
             authorization_mode = resolve_retrieval_authorization(token, allow_anonymous)
             mcp_enabled = (
                 retrieval_backend == RETRIEVAL_BACKEND_FOUNDRY_IQ
@@ -263,6 +268,8 @@ class MafLiteStrategy(BaseAgentStrategy):
                 embed_fn = _embed
 
             async def _get_obo_token() -> str | None:
+                if delegated is not None:
+                    return delegated.search_token
                 return (
                     await acquire_obo_search_token(
                         token,
@@ -287,6 +294,7 @@ class MafLiteStrategy(BaseAgentStrategy):
                     allow_anonymous=allow_anonymous,
                     mcp_enabled=mcp_enabled,
                     user_context=self.user_context,
+                    delegated_retrieval=delegated,
                 )
                 logging.info(
                     "[MafLiteStrategy] FoundryIQContextProvider created (top_k=%d)",
@@ -305,6 +313,7 @@ class MafLiteStrategy(BaseAgentStrategy):
                 get_obo_token=_get_obo_token,
                 authorization_mode=authorization_mode,
                 max_content_chars=self.max_content_chars,
+                **({"native_permissions": True} if delegated is not None else {}),
             )
             logging.info(
                 "[MafLiteStrategy] SearchContextProvider created (index=%s, top_k=%d)",

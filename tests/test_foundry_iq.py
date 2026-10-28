@@ -48,9 +48,10 @@ def _configure_audit(enabled):
 # ---------------------------------------------------------------------------
 
 class _FakeResponse:
-    def __init__(self, payload, status=200):
+    def __init__(self, payload, status=200, headers=None):
         self._payload = payload
         self.status = status
+        self.headers = headers or {}
 
     async def text(self):
         return json.dumps(self._payload)
@@ -66,14 +67,15 @@ class _FakeResponse:
 
 
 class _FakeSession:
-    def __init__(self, payload, status=200):
+    def __init__(self, payload, status=200, headers=None):
         self._payload = payload
         self._status = status
         self.captured = {}
+        self.response_headers = headers or {}
 
     def post(self, url, headers=None, json=None):  # noqa: A002
         self.captured = {"url": url, "headers": headers, "json": json}
-        return _FakeResponse(self._payload, self._status)
+        return _FakeResponse(self._payload, self._status, self.response_headers)
 
 
 def _build_client(payload, status=200, config_overrides=None):

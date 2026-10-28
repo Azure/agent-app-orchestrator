@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from connectors.obo import DelegatedRetrievalCredentials
 
 
 @dataclass(slots=True)
@@ -23,6 +26,7 @@ class TurnRequest:
     # resolve the signed-in user and apply native document-level security.
     # Never log this value.
     foundry_call_id: str | None = None
+    delegated_retrieval: DelegatedRetrievalCredentials | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +94,7 @@ class TurnErrorEvent:
     message: str = "An internal server error occurred."
     code: str = "internal_error"
     retryable: bool = False
+    claims_challenge: str | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)

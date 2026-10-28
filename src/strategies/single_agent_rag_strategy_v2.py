@@ -1,6 +1,7 @@
 import logging
 import json
 import time
+from copy import copy
 from typing import Optional
 
 # Suppress Azure SDK HTTP logging BEFORE importing azure packages
@@ -169,7 +170,9 @@ class SingleAgentRAGStrategyV2(BaseAgentStrategy):
             logging.warning("[Init V2] SEARCH_RETRIEVAL_ENABLED set to false. SearchClient will not be available.")
             self.search_client = None
         else:
-            self.search_client = get_search_client()
+            client = get_search_client()
+            # Reuse transport/config, never singleton mutable caller credentials.
+            self.search_client = copy(client) if self.hosted_runtime else client
             logging.info("[Init V2] ✅ SearchClient initialized (singleton)")
 
         # Hard cap on output tokens for the main agent response.
@@ -219,13 +222,17 @@ class SingleAgentRAGStrategyV2(BaseAgentStrategy):
         request_access_token = getattr(self, "request_access_token", None)
         conversation_id = self._resolve_conversation_id()
         try:
+            delegated = getattr(self, "delegated_retrieval", None)
             self.search_client.set_request_context(
                 api_access_token=request_access_token,
                 allow_anonymous=allow_anonymous,
                 conversation_id=conversation_id,
                 user_context=self.user_context,
+                **({"delegated_retrieval": delegated} if delegated is not None else {}),
             )
         except Exception:
+            if getattr(self, "delegated_retrieval", None) is not None:
+                raise RuntimeError("Protected Search request context unavailable") from None
             logging.warning("[Agent Flow V2] Failed to apply legacy search request context")
             raise
 
@@ -267,7 +274,7 @@ class SingleAgentRAGStrategyV2(BaseAgentStrategy):
         flow_start = time.time()
 
         is_empty = False
-        if self.search_client:
+        if self.search_client and getattr(self, "delegated_retrieval", None) is None:
             is_empty = await self.search_client.is_index_empty()
 
         logging.info(f"[Agent Flow V2] Index Empty Check Result: {is_empty} ({round(time.time() - flow_start, 2)}s)")
