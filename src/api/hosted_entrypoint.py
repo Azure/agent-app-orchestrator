@@ -732,6 +732,7 @@ async def _responses_events(
                 failed = response_stream.emit_failed(
                     code=event.code, message=event.message,
                 )
+                failed["response"]["error"]["retryable"] = False
                 if event.claims_challenge is not None:
                     failed["response"]["error"]["claims_challenge"] = event.claims_challenge
                 await events.aclose()

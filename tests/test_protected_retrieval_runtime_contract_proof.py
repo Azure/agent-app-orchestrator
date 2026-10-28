@@ -442,6 +442,7 @@ def test_search_challenge_through_native_provider_and_actual_hosted_adapter(
         assert response.json()["output"] == []
         errors = [response.json()["error"]]
     assert len(errors) == 1
+    assert errors[0]["retryable"] is False
     assert errors[0]["code"] == ("interaction_required" if challenge else "source_denied")
     assert errors[0].get("claims_challenge") == (CLAIMS if challenge else None)
     assert not any(frame["type"] == "response.completed" for frame in frames)
