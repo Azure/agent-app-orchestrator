@@ -254,8 +254,8 @@
       "module_id": "strategies.single_agent_rag_strategy_v2",
       "symbol": "SingleAgentRAGStrategyV2._apply_search_request_context",
       "path": "src/strategies/single_agent_rag_strategy_v2.py",
-      "line": 228,
-      "handler_fingerprint": "87f023ac97365a115a499f073e2c35b04bf4e571507245a81df97cc78cbb2b03",
+      "line": 233,
+      "handler_fingerprint": "13e39ad8eb0c61ede4485d15e53bbf4056918dfd6209bff7a39239526cc8ab9d",
       "caught_types": ["Exception"],
       "status": "active",
       "boundary": "Legacy request-context setter before the single-agent retrieval tool",
@@ -275,7 +275,7 @@
         "tests/test_single_agent_rag_v2_conversation_scope.py::TestSingleAgentRagV2ConversationScope::test_build_search_tool_returns_none_without_search_client",
         "tests/test_single_agent_rag_v2_conversation_scope.py::TestSingleAgentRagV2ConversationScope::test_apply_context_noop_without_search_client"
       ],
-      "review": "Initial administrative adoption authorized by maintainer: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. Exact existing exception only; not independent review, additional allowances, or approval of broader identity, durability or runtime behavior.",
+      "review": "Initial administrative adoption: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. Maintainer explicitly authorized the narrow native protected-retrieval source rebind for c65bc4b2acfa96bf662e2ce313546a902cacc468 in the current task. Existing caught types, failure outcome and evidence remain unchanged; no additional handler allowance. Protected-base adoption and Azure acceptance remain separate.",
       "review_by_stage": "before-quality-gate-activation"
     },
     {
@@ -377,8 +377,8 @@
       "module_id": "connectors.foundry_iq",
       "symbol": "FoundryIQClient.retrieve",
       "path": "src/connectors/foundry_iq.py",
-      "line": 2010,
-      "handler_fingerprint": "d3b84eba030edfa3ddac0227c1116b877e19e64dc38e597078dd08bc2430a3c9",
+      "line": 2191,
+      "handler_fingerprint": "2fdf9f2a8ddec26e2718ee0ee0ddd99d86da49e1f79531fb5ac4bdfe58c7938a",
       "caught_types": ["Exception"],
       "status": "active",
       "boundary": "Foundry retrieve HTTP context, response read, decoding and cleanup",
@@ -401,7 +401,7 @@
         "tests/test_foundry_connector_boundaries.py::test_foundry_request_translation_keeps_cleanup_and_error_identity[success-legacy]",
         "tests/test_foundry_connector_boundaries.py::test_foundry_request_translation_keeps_cleanup_and_error_identity[success-mcp]"
       ],
-      "review": "Initial administrative adoption authorized by maintainer: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. Exact existing exception only; not independent review, additional allowances, or approval of broader identity, durability or runtime behavior.",
+      "review": "Initial administrative adoption: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. Maintainer explicitly authorized the narrow native protected-retrieval source rebind for c65bc4b2acfa96bf662e2ce313546a902cacc468 in the current task. Existing caught types, failure outcome and evidence remain unchanged; no additional handler allowance. Protected-base adoption and Azure acceptance remain separate.",
       "review_by_stage": "before-quality-gate-activation"
     },
     {
@@ -409,8 +409,8 @@
       "module_id": "strategies.maf_agent_service_strategy",
       "symbol": "MafAgentServiceStrategy._create_search_provider",
       "path": "src/strategies/maf_agent_service_strategy.py",
-      "line": 272,
-      "handler_fingerprint": "5bd41ccd024f1f741781a02774fb54a260a1d7a202bce157ea6e6085e0a0eec8",
+      "line": 302,
+      "handler_fingerprint": "e32a664bdabb95f0e4d3690a9838dcb0e89551f297f7a0da274d6157f9852744",
       "caught_types": ["Exception"],
       "status": "active",
       "boundary": "MAF Agent Service configured Search/Foundry context-provider construction",
@@ -425,7 +425,7 @@
         "tests/test_strategy_helper_boundaries.py::test_provider_construction_propagates_configured_failure[service-cancelled-ai_search]",
         "tests/test_strategy_helper_boundaries.py::test_provider_construction_propagates_configured_failure[service-cancelled-foundry_iq]"
       ],
-      "review": "Initial administrative adoption authorized by maintainer: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. Exact existing exception only; not independent review, additional allowances, or approval of broader identity, durability or runtime behavior.",
+      "review": "Initial administrative adoption: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. Maintainer explicitly authorized the narrow native protected-retrieval source rebind for c65bc4b2acfa96bf662e2ce313546a902cacc468 in the current task. Existing caught types, failure outcome and evidence remain unchanged; no additional handler allowance. Protected-base adoption and Azure acceptance remain separate.",
       "review_by_stage": "before-quality-gate-activation"
     },
     {
@@ -433,8 +433,8 @@
       "module_id": "strategies.maf_lite_strategy",
       "symbol": "MafLiteStrategy._create_search_provider",
       "path": "src/strategies/maf_lite_strategy.py",
-      "line": 292,
-      "handler_fingerprint": "4da5bd6d3dab42d35b48531d62ad4c0c0c11dcb1da29e007638a51656d505176",
+      "line": 323,
+      "handler_fingerprint": "f835797243dc5c86273b6cdb13ccf631a4be37bf070fdb84f3f929a3a7a85052",
       "caught_types": ["Exception"],
       "status": "active",
       "boundary": "MafLite configured Search/Foundry context-provider construction",
@@ -450,7 +450,7 @@
         "tests/test_strategy_helper_boundaries.py::test_provider_construction_propagates_configured_failure[lite-cancelled-ai_search]",
         "tests/test_strategy_helper_boundaries.py::test_provider_construction_propagates_configured_failure[lite-cancelled-foundry_iq]"
       ],
-      "review": "Initial administrative adoption authorized by maintainer: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. Exact existing exception only; not independent review, additional allowances, or approval of broader identity, durability or runtime behavior.",
+      "review": "Initial administrative adoption: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. Maintainer explicitly authorized the narrow native protected-retrieval source rebind for c65bc4b2acfa96bf662e2ce313546a902cacc468 in the current task. Existing caught types, failure outcome and evidence remain unchanged; no additional handler allowance. Protected-base adoption and Azure acceptance remain separate.",
       "review_by_stage": "before-quality-gate-activation"
     },
     {
@@ -603,8 +603,8 @@
       "module_id": "strategies.search_context_provider",
       "symbol": "SearchContextProvider.invoking",
       "path": "src/strategies/search_context_provider.py",
-      "line": 179,
-      "handler_fingerprint": "232eab6d6803ec1de1ca6d1ac2d3521f035d0d38761a8d20618b1a3315c1b830",
+      "line": 187,
+      "handler_fingerprint": "d3a513c0ec406bba9d8351db3b3158b1217024ea02ccba66a37b96f156d2eeb6",
       "caught_types": ["Exception"],
       "status": "active",
       "boundary": "Context-provider SDK search, asynchronous result iteration and context shaping",
@@ -624,7 +624,7 @@
         "tests/test_retrieval_logging.py::test_real_search_provider_and_composite_preserve_distinct_failure_outcomes[sibling]",
         "tests/test_retrieval_logging.py::test_search_provider_cancellation_is_not_empty_context[search]"
       ],
-      "review": "Initial administrative adoption authorized by maintainer: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. Exact existing exception only; not independent review, additional allowances, or approval of broader identity, durability or runtime behavior.",
+      "review": "Initial administrative adoption: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. Maintainer explicitly authorized the narrow native protected-retrieval source rebind for c65bc4b2acfa96bf662e2ce313546a902cacc468 in the current task. Existing caught types, failure outcome and evidence remain unchanged; no additional handler allowance. Protected-base adoption and Azure acceptance remain separate.",
       "review_by_stage": "before-quality-gate-activation"
     },
     {
@@ -632,8 +632,8 @@
       "module_id": "connectors.search",
       "symbol": "SearchClient.search_knowledge_base",
       "path": "src/connectors/search.py",
-      "line": 670,
-      "handler_fingerprint": "327e79e98b68df6006a3462cdaf55c9543bc5d8a463b626effaf8064f2e7fc5e",
+      "line": 766,
+      "handler_fingerprint": "ef2e376a0ffbe6dea93a20b2cb78e29b9e0efe09603e0174c5ed2acdeba7532d",
       "caught_types": ["Exception"],
       "status": "active",
       "boundary": "Classic Search connector retrieval result envelope, after delegated request inputs",
@@ -650,7 +650,7 @@
         "tests/test_search_boundary_dispositions.py::test_failure_before_token_assignment_preserves_original_retrieval_contract[obo-strict]",
         "tests/test_search_boundary_dispositions.py::test_failure_before_token_assignment_preserves_original_retrieval_contract[obo-anonymous]"
       ],
-      "review": "Initial administrative adoption authorized by maintainer: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. Exact existing exception only; not independent review, additional allowances, or approval of broader identity, durability or runtime behavior.",
+      "review": "Initial administrative adoption: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. Maintainer explicitly authorized the narrow native protected-retrieval source rebind for c65bc4b2acfa96bf662e2ce313546a902cacc468 in the current task. Existing caught types, failure outcome and evidence remain unchanged; no additional handler allowance. Protected-base adoption and Azure acceptance remain separate.",
       "review_by_stage": "before-quality-gate-activation"
     },
     {
@@ -1375,8 +1375,8 @@
       "module_id": "connectors.search",
       "symbol": "SearchClient._search_knowledge_base_foundry_iq",
       "path": "src/connectors/search.py",
-      "line": 779,
-      "handler_fingerprint": "ce2d376962cca89fcbd1fd58d05be30e3b7bfce07fb1f3b822ccb81029d987af",
+      "line": 888,
+      "handler_fingerprint": "f5275a2dc24f7ecdbd36327afc45b6ef01aabdaf1ae004b73b2245bcb157f650",
       "caught_types": ["Exception"],
       "status": "active",
       "boundary": "Foundry IQ adapter to the Search JSON result contract",
@@ -1392,7 +1392,7 @@
         "tests/test_search_boundary_dispositions.py::test_foundry_wrapper_keeps_exact_failure_and_credential_contract[malformed-anonymous-True]",
         "tests/test_search_boundary_dispositions.py::test_foundry_wrapper_keeps_exact_failure_and_credential_contract[cancelled-anonymous-True]"
       ],
-      "review": "Initial administrative adoption authorized by maintainer: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. Exact existing exception only; not independent review, additional allowances, or approval of broader identity, durability or runtime behavior.",
+      "review": "Initial administrative adoption: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. Maintainer explicitly authorized the narrow native protected-retrieval source rebind for c65bc4b2acfa96bf662e2ce313546a902cacc468 in the current task. Existing caught types, failure outcome and evidence remain unchanged; no additional handler allowance. Protected-base adoption and Azure acceptance remain separate.",
       "review_by_stage": "before-quality-gate-activation"
     },
     {
@@ -1631,8 +1631,8 @@
       "module_id": "strategies.foundry_iq_context_provider",
       "symbol": "FoundryIQContextProvider.invoking",
       "path": "src/strategies/foundry_iq_context_provider.py",
-      "line": 157,
-      "handler_fingerprint": "1bad1e028aba79be93961c45b4be6a161513fdd7f6d3495ae900556f4278cdb7",
+      "line": 168,
+      "handler_fingerprint": "3086999b8449c2644a9439dbb6315d22d89e3665938e36d33cc41578707128e9",
       "caught_types": ["Exception"],
       "status": "active",
       "boundary": "Foundry context provider retrieval/mapping failure propagation",
@@ -1655,7 +1655,7 @@
         "tests/test_context_provider_boundary_dispositions.py::test_foundry_context_retains_mcp_specific_failure_rules[malformed-anonymous-setting-False]",
         "tests/test_context_provider_boundary_dispositions.py::test_foundry_context_retains_mcp_specific_failure_rules[obo-none-strict-setting-True]"
       ],
-      "review": "Initial administrative adoption authorized by maintainer: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. Exact existing exception only; not independent review, additional allowances, or approval of broader identity, durability or runtime behavior.",
+      "review": "Initial administrative adoption: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. Maintainer explicitly authorized the narrow native protected-retrieval source rebind for c65bc4b2acfa96bf662e2ce313546a902cacc468 in the current task. Existing caught types, failure outcome and evidence remain unchanged; no additional handler allowance. Protected-base adoption and Azure acceptance remain separate.",
       "review_by_stage": "before-quality-gate-activation"
     },
     {
@@ -2136,8 +2136,8 @@
       "module_id": "api.hosted_entrypoint",
       "symbol": "_hosted_stream",
       "path": "src/api/hosted_entrypoint.py",
-      "line": 214,
-      "handler_fingerprint": "ffda26fac26a2c21905ab003e8a1fd9df02538ff0b9641ee543a2c740a616b1c",
+      "line": 216,
+      "handler_fingerprint": "14486e4a71503027834d7430fd299780f221753273c560983f4dae7b55715891",
       "caught_types": ["Exception"],
       "status": "active",
       "boundary": "Hosted typed turn stream consuming a selected runtime strategy",
@@ -2151,7 +2151,7 @@
         "tests/test_hosted_responses.py::TestSseGeneratorErrorClassification::test_real_hosted_stream_keeps_terminal_outcome_and_safe_transport_log[failure-True]",
         "tests/test_hosted_responses.py::TestSseGeneratorErrorClassification::test_real_hosted_stream_keeps_terminal_outcome_and_safe_transport_log[cancelled-True]"
       ],
-      "review": "Initial administrative adoption authorized by maintainer: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. Exact existing exception only; not independent review, additional allowances, or approval of broader identity, durability or runtime behavior.",
+      "review": "Initial administrative adoption: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. Maintainer explicitly authorized the narrow native protected-retrieval source rebind for c65bc4b2acfa96bf662e2ce313546a902cacc468 in the current task. Existing caught types, failure outcome and evidence remain unchanged; no additional handler allowance. Protected-base adoption and Azure acceptance remain separate.",
       "review_by_stage": "before-quality-gate-activation"
     },
     {
