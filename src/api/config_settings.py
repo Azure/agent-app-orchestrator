@@ -314,6 +314,22 @@ SECTIONS: List[SettingSection] = [
         ),
         settings=[
             SettingSpec(
+                key="RETRIEVAL_AUTH_MODE",
+                type="enum",
+                default="native_search",
+                label="Hosted retrieval authorization",
+                description=(
+                    "Protected hosted retrieval uses BFF-issued delegated Search "
+                    "credentials and native source permissions. Does not change "
+                    "classic API OBO or allow service-identity data access."
+                ),
+                options=[SettingOption(
+                    value="native_search",
+                    label="Native Search permissions",
+                    description="Forward request-local delegated credentials; fail closed if unavailable.",
+                )],
+            ),
+            SettingSpec(
                 key="RETRIEVAL_BACKEND",
                 type="enum",
                 default="ai_search",

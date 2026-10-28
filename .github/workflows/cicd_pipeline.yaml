@@ -1,9 +1,7 @@
-name: CI/CD Dev Pipeline
+name: Manual Dev Deployment
 
 on:
-  push:
-    branches:
-      - develop
+  workflow_dispatch:
 
 jobs:
   deploy:

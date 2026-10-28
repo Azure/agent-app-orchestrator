@@ -30,6 +30,11 @@ _SEPARATOR = re.compile(r"[^a-z0-9]+")
 _PROHIBITED_KEY_PARTS = frozenset(
     {
         "authorization",
+        "claimschallenge",
+        "wwwauthenticate",
+        "xclientsearchtoken",
+        "xclientworkiqassertion",
+        "delegatedretrieval",
         "proxyauth",
         "proxyauthorization",
         "cookie",

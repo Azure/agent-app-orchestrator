@@ -22,7 +22,10 @@ from typing import Any, Mapping, Optional
 from agent_framework import ChatMessage, Context, ContextProvider, Role
 
 from connectors.foundry_iq import get_foundry_iq_client
-from connectors.obo import RetrievalAuthorizationMode, require_retrieval_token, resolve_retrieval_authorization
+from connectors.obo import (
+    DelegatedRetrievalCredentials, HostedRetrievalError, RetrievalAuthorizationMode,
+    require_retrieval_token, resolve_retrieval_authorization,
+)
 from connectors.search import _classify_retrieval_error
 from telemetry import AuditEmitter, ReasonCode
 from util.blob_sas import sign_blob_url
@@ -46,6 +49,7 @@ class FoundryIQContextProvider(ContextProvider):
         allow_anonymous: bool = True,
         mcp_enabled: bool = False,
         user_context: Optional[Mapping[str, Any]] = None,
+        delegated_retrieval: DelegatedRetrievalCredentials | None = None,
     ) -> None:
         self._conversation_id = (conversation_id or "").strip() or None
         self._top_k = top_k
@@ -56,6 +60,7 @@ class FoundryIQContextProvider(ContextProvider):
         self._allow_anonymous = allow_anonymous
         self._mcp_enabled = mcp_enabled
         self._user_context = dict(user_context or {})
+        self._delegated_retrieval = delegated_retrieval
 
     async def __aenter__(self):
         return self
@@ -122,6 +127,9 @@ class FoundryIQContextProvider(ContextProvider):
                 "conversation_id": self._conversation_id,
                 "user_context": self._user_context,
             }
+            if self._delegated_retrieval is not None:
+                retrieve_kwargs["native_permissions"] = True
+                retrieve_kwargs["work_iq_assertion"] = self._delegated_retrieval.work_iq_assertion
             if mcp_enabled:
                 retrieve_kwargs["incoming_token"] = self._request_access_token
             records = await client.retrieve(query, **retrieve_kwargs)
@@ -141,7 +149,10 @@ class FoundryIQContextProvider(ContextProvider):
                 # citation resolves without public blob access. The audit trail
                 # below keeps the unsigned link so no SAS token reaches
                 # telemetry.
-                citation_link = await sign_blob_url(link) if link else link
+                citation_link = (
+                    link if self._delegated_retrieval is not None
+                    else await sign_blob_url(link) if link else link
+                )
                 parts.append(format_context_part(title, citation_link, content))
                 AuditEmitter.default().emit_source(
                     selected=True,
@@ -171,6 +182,10 @@ class FoundryIQContextProvider(ContextProvider):
                     "retrieval_credential_type": "obo" if obo_token else "managed_identity",
                 },
             )
+            if self._delegated_retrieval is not None:
+                if isinstance(e, HostedRetrievalError):
+                    raise
+                raise RuntimeError("Protected retrieval failed") from None
             raise
 
         logger.info(

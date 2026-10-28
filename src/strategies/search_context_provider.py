@@ -16,11 +16,12 @@ from typing import Any, Optional
 
 from agent_framework import ChatMessage, Context, ContextProvider, Role
 from azure.core.credentials_async import AsyncTokenCredential
+from azure.core.exceptions import HttpResponseError
 from azure.search.documents.aio import SearchClient
 from azure.search.documents.models import VectorizedQuery, QueryType, QueryCaptionType
 
 from connectors.search import _classify_retrieval_error, build_conversation_filter
-from connectors.obo import RetrievalAuthorizationMode, require_retrieval_token
+from connectors.obo import HostedRetrievalError, RetrievalAuthorizationMode, require_retrieval_token
 from dependencies import get_config
 from util.metadata import format_custom_metadata, parse_allowed_keys
 from telemetry import AuditEmitter, ReasonCode
@@ -46,6 +47,7 @@ class SearchContextProvider(ContextProvider):
         get_obo_token: Callable[[], Awaitable[Optional[str]]] | None = None,
         authorization_mode: RetrievalAuthorizationMode = RetrievalAuthorizationMode.USER_REQUIRED,
         owner_id: Optional[str] = None,
+        native_permissions: bool = False,
     ) -> None:
         self._endpoint = endpoint
         self._index_name = index_name
@@ -59,6 +61,7 @@ class SearchContextProvider(ContextProvider):
         self._max_content_chars = max_content_chars
         self._get_obo_token = get_obo_token
         self._authorization_mode = authorization_mode
+        self._native_permissions = native_permissions
 
     async def __aenter__(self):
         return self
@@ -104,7 +107,8 @@ class SearchContextProvider(ContextProvider):
         # Conversation scoping: only this caller's chunks in this conversation
         # plus shared/global chunks.
         search_params["filter"] = build_conversation_filter(
-            self._conversation_id, owner_id=self._owner_id, field_name="conversationId"
+            self._conversation_id, owner_id=self._owner_id, field_name="conversationId",
+            native_permissions=self._native_permissions,
         )
 
         # Hybrid search: add vector query when embedding function is available
@@ -199,6 +203,16 @@ class SearchContextProvider(ContextProvider):
                     "retrieval_credential_type": "obo" if obo_token else "managed_identity",
                 },
             )
+            if self._native_permissions:
+                if isinstance(e, HostedRetrievalError):
+                    raise
+                if isinstance(e, HttpResponseError) and e.response is not None:
+                    auth_error = HostedRetrievalError.from_response(
+                        e.status_code, e.response.headers.items(),
+                    )
+                    if auth_error is not None:
+                        raise auth_error from None
+                raise RuntimeError("Protected Search retrieval failed") from None
             raise
 
         logger.info("[SearchContextProvider] Search returned %d documents in %.2fs", len(parts), time.time() - search_start)
