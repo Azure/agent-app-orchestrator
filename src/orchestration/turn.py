@@ -94,6 +94,7 @@ class TurnErrorEvent:
     message: str = "An internal server error occurred."
     code: str = "internal_error"
     retryable: bool = False
+    claims_challenge: str | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)

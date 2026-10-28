@@ -39,7 +39,7 @@ import logging
 import os
 import time
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import suppress
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Literal, Optional, Sequence, cast
@@ -212,6 +212,13 @@ async def _hosted_stream(
                 )
     except asyncio.CancelledError:
         yield TurnCancelledEvent()
+        raise
+    except HostedRetrievalError as exc:
+        strategy.delegated_retrieval = None
+        yield TurnErrorEvent(
+            message=str(exc), code=exc.code,
+            claims_challenge=exc.claims_challenge,
+        )
         raise
     except Exception:
         yield TurnErrorEvent()
@@ -579,7 +586,7 @@ async def _cancel_aware_events(
     events: AsyncIterator[TurnOutputEvent],
     cancellation_signal: asyncio.Event,
     shutdown_signal: asyncio.Event,
-) -> AsyncIterator[TurnOutputEvent]:
+) -> AsyncGenerator[TurnOutputEvent, None]:
     """Stop and close in-flight strategy work on cancellation or shutdown."""
     iterator = events.__aiter__()
     active_tasks: set[asyncio.Task[Any]] = set()
@@ -693,11 +700,12 @@ async def _responses_events(
     text_content = None
     full_text: list[str] = []
 
-    async for event in _cancel_aware_events(
+    events = _cancel_aware_events(
         _hosted_stream(turn, strategy_key, history),
         cancellation_signal,
         context.shutdown,
-    ):
+    )
+    async for event in events:
         if isinstance(event, TurnConversationEvent):
             response_stream = ResponseEventStream(
                 response_id=context.response_id,
@@ -718,6 +726,17 @@ async def _responses_events(
             full_text.append(event.text)
             yield text_content.emit_delta(event.text)
         elif isinstance(event, TurnErrorEvent):
+            if event.code in {
+                "authentication_required", "interaction_required", "source_denied",
+            } and response_stream is not None:
+                failed = response_stream.emit_failed(
+                    code=event.code, message=event.message,
+                )
+                if event.claims_challenge is not None:
+                    failed["response"]["error"]["claims_challenge"] = event.claims_challenge
+                await events.aclose()
+                yield failed
+                return
             raise RuntimeError(event.message)
         elif isinstance(event, TurnCancelledEvent):
             cancellation_signal.set()

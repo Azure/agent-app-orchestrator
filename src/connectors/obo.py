@@ -1,16 +1,18 @@
 """Scope-aware delegated token exchange shared by Search and Foundry IQ."""
 
 import hashlib
+import base64
 import json
 import logging
 import time
 from enum import Enum
 from dataclasses import dataclass, field
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from collections.abc import Awaitable, Callable
 from typing import Any, Optional
 from uuid import UUID
 from urllib.parse import urlsplit
+from urllib.request import parse_http_list, parse_keqv_list
 
 import aiohttp
 
@@ -35,9 +37,97 @@ class DelegatedRetrievalCredentials:
 class HostedRetrievalError(ValueError):
     """Safe HTTP-boundary failure with no credential or provider payload."""
 
-    def __init__(self, message: str, status_code: int = 401) -> None:
+    def __init__(
+        self, message: str, status_code: int = 401, *,
+        claims_challenge: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.status_code = status_code
+        self.claims_challenge = (
+            self._validated_claims(claims_challenge) if status_code in (401, 403) else None
+        )
+        self.code = (
+            "interaction_required" if self.claims_challenge is not None
+            else "source_denied" if status_code == 403
+            else "authentication_required" if status_code == 401
+            else "configuration_error"
+        )
+
+    @staticmethod
+    def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("Ambiguous authentication challenge")
+            result[key] = value
+        return result
+
+    @staticmethod
+    def _validated_claims(value: object) -> str | None:
+        if not isinstance(value, str) or not value:
+            return None
+        try:
+            if len(value.encode("utf-8")) > 8192:
+                return None
+            claims = json.loads(value, object_pairs_hook=HostedRetrievalError._unique_object)
+            if (
+                not isinstance(claims, dict) or set(claims) != {"access_token"}
+                or not isinstance(claims["access_token"], dict)
+                or not claims["access_token"]
+            ):
+                return None
+            normalized = json.dumps(
+                claims, separators=(",", ":"), ensure_ascii=True, allow_nan=False,
+            )
+            return normalized if len(normalized) <= 8192 else None
+        except (ValueError, UnicodeError, RecursionError):
+            return None
+
+    @classmethod
+    def from_response(
+        cls, status_code: int, headers: Iterable[tuple[str, str]],
+    ) -> "HostedRetrievalError | None":
+        """Classify only the configured source's HTTP authentication boundary."""
+        if status_code not in (401, 403):
+            return None
+        challenge = None
+        values = [value for key, value in headers if key.lower() == "www-authenticate"]
+        if (
+            len(values) == 1 and len(values[0]) <= 16384
+            and all(32 <= ord(char) < 127 for char in values[0])
+        ):
+            scheme, _, parameters = values[0].partition(" ")
+            if scheme.lower() == "bearer":
+                parts = parse_http_list(parameters)
+                names = [part.partition("=")[0].strip().lower() for part in parts]
+                if (
+                    len(names) == len(set(names))
+                    and all("=" in part for part in parts)
+                    and all(name and not any(char.isspace() for char in name) for name in names)
+                ):
+                    params = {
+                        key.lower(): value
+                        for key, value in parse_keqv_list(parts).items()
+                    }
+                    raw = params.get("claims", "")
+                    challenge = cls._validated_claims(raw)
+                    if challenge is None and raw:
+                        try:
+                            decoded = base64.b64decode(
+                                raw + "=" * (-len(raw) % 4),
+                                altchars=b"-_", validate=True,
+                            ).decode("utf-8")
+                            challenge = cls._validated_claims(decoded)
+                        except (ValueError, UnicodeError):
+                            pass
+        message = (
+            "Additional sign-in verification is required for protected retrieval."
+            if challenge is not None
+            else "Access to the protected source was denied."
+            if status_code == 403
+            else "Sign in again to access protected sources."
+        )
+        return cls(message, status_code, claims_challenge=challenge)
 
 
 def _config_enabled(cfg: Any, key: str, default: bool = False) -> bool:

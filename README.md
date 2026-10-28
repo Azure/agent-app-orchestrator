@@ -82,6 +82,10 @@ before choosing a topology.
 
 ## Contributing
 
+Updating `develop` does not deploy to Azure. Dev deployment is opt-in through
+the **Manual Dev Deployment** workflow in GitHub Actions; run it explicitly
+against the intended branch only when a deployment is authorized.
+
 Use the repository's [engineering contract](AGENTS.md) and
 [contribution guidelines](https://github.com/Azure/agent-landing-zone/blob/main/CONTRIBUTING.md).
 The [deprecated evaluations folder](evaluations/README.md) links to external

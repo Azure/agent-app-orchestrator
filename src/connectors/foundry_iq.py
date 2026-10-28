@@ -35,7 +35,11 @@ from opentelemetry.trace.propagation.tracecontext import (
 )
 
 from dependencies import get_config
-from connectors.obo import validate_indexed_sharepoint_configuration, validate_work_iq_configuration
+from connectors.obo import (
+    HostedRetrievalError,
+    validate_indexed_sharepoint_configuration,
+    validate_work_iq_configuration,
+)
 from telemetry import (
     AuditEmitter,
     AuditStatus,
@@ -2170,6 +2174,12 @@ class FoundryIQClient:
         try:
             async with session.post(url, headers=headers, json=body) as resp:
                 response_status = resp.status
+                if native_permissions and resp.status in (401, 403):
+                    auth_error = HostedRetrievalError.from_response(
+                        resp.status, resp.headers.items(),
+                    )
+                    if auth_error is not None:
+                        raise auth_error
                 await resp.text()
                 if resp.status >= 400:
                     if self.mcp_config.enabled:
@@ -2190,6 +2200,8 @@ class FoundryIQClient:
             raise
         except Exception as exc:
             if native_permissions:
+                if isinstance(exc, HostedRetrievalError):
+                    raise
                 raise RuntimeError("Protected knowledge retrieval failed") from None
             if self.mcp_config.enabled:
                 raise McpSourceError(

@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from agent_framework import ChatMessage, Role
 
-from connectors.obo import DelegatedRetrievalCredentials
+from connectors.obo import DelegatedRetrievalCredentials, HostedRetrievalError
 from strategies import foundry_iq_context_provider as provider_module
 from test_foundry_iq import _build_client
 
@@ -193,8 +193,11 @@ async def test_native_search_provider_exception_is_redacted_without_retry(caplog
 ])
 async def test_no_partial_success_or_provider_error_leak(status, payload, caplog):
     client, _ = _build_client(payload, status=status, config_overrides=_PRIMARY)
-    with pytest.raises(RuntimeError) as raised:
+    expected_error = HostedRetrievalError if status == 403 else RuntimeError
+    with pytest.raises(expected_error) as raised:
         await client.retrieve("question", obo_token=_TOKEN, native_permissions=True)
+    if status == 403:
+        assert raised.value.code == "source_denied"
     assert _TOKEN not in str(raised.value)
     assert _TOKEN not in "".join(traceback.format_exception(raised.value))
     assert _TOKEN not in caplog.text

@@ -20,6 +20,7 @@ from connectors.foundry_iq import McpSourceError, get_foundry_iq_client
 from connectors.foundry_iq_mcp import McpConfigurationError, McpCredentialError
 from connectors.obo import (
     DelegatedRetrievalCredentials,
+    HostedRetrievalError,
     acquire_obo_token as _acquire_obo_token,
     classify_retrieval_error as _classify_retrieval_error,
 )
@@ -486,6 +487,15 @@ class SearchClient:
 
         session = await self._get_session()
         async with session.post(url, headers=headers, json=body) as resp:
+                if (
+                    getattr(self, "_delegated_retrieval", None) is not None
+                    and resp.status in (401, 403)
+                ):
+                    auth_error = HostedRetrievalError.from_response(
+                        resp.status, resp.headers.items(),
+                    )
+                    if auth_error is not None:
+                        raise auth_error
                 text = await resp.text()
                 if resp.status >= 400:
                     if getattr(self, "_delegated_retrieval", None) is not None:
@@ -784,6 +794,8 @@ class SearchClient:
             # In strict mode (ALLOW_ANONYMOUS=false), do not silently degrade.
             # Raise so the request fails early and the logs make the root cause obvious.
             if getattr(self, "_delegated_retrieval", None) is not None:
+                if isinstance(e, HostedRetrievalError):
+                    raise
                 raise RuntimeError("Protected Search retrieval failed") from None
             if not self._allow_anonymous:
                 raise
@@ -902,6 +914,8 @@ class SearchClient:
                 },
             )
             if getattr(self, "_delegated_retrieval", None) is not None:
+                if isinstance(e, HostedRetrievalError):
+                    raise
                 raise RuntimeError("Protected knowledge retrieval failed") from None
             if isinstance(e, McpConfigurationError):
                 raise

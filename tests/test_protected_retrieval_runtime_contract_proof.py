@@ -1,6 +1,7 @@
 """Real pinned SDK hosted credential integration, with no live Azure boundaries."""
 
 import asyncio
+import json
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -55,9 +56,9 @@ def protected_host(mock_config, patch_dependencies):
             yield client
 
 
-def _post(client, protocol, *, headers=None, conversation_id=None):
+def _post(client, protocol, *, headers=None, conversation_id=None, stream=True):
     payload = (
-        {"input": "Find the protected document.", "stream": True, "store": False}
+        {"input": "Find the protected document.", "stream": stream, "store": False}
         if protocol == "responses"
         else {"messages": [{"role": "user", "content": "Find the protected document."}]}
     )
@@ -389,6 +390,68 @@ def test_background_token_request_is_rejected_without_sdk_task_input(protected_h
         )
     assert response.status_code == 422
     factory.assert_not_awaited()
+
+
+@pytest.mark.parametrize("protocol,stream", [
+    ("responses", True), ("responses", False), ("invocations", True),
+])
+@pytest.mark.parametrize("status,challenge", [(401, True), (403, True), (403, False)])
+@pytest.mark.parametrize("partial", [False, True])
+def test_search_challenge_through_native_provider_and_actual_hosted_adapter(
+    protected_host, mock_config, protocol, stream, status, challenge, partial, caplog,
+):
+    from test_foundry_iq import _build_client
+    from test_retrieval_claims_recovery import CLAIMS, HEADER
+
+    remote, session = _build_client(
+        {"error": {"message": "synthetic-sensitive-provider-body"}},
+        status=status, config_overrides={"FOUNDRY_IQ_KNOWLEDGE_SOURCE_NAME": "corpus"},
+    )
+    session.response_headers = {"WWW-Authenticate": HEADER} if challenge else {}
+    with patch.object(lite, "get_config", return_value=mock_config):
+        strategy = lite.MafLiteStrategy()
+    strategy.embedding_deployment = None
+
+    async def provider_flow(ask):
+        if partial:
+            yield "synthetic partial output"
+        provider = await strategy._create_search_provider()
+        await provider.invoking(ChatMessage(role=Role.USER, text=ask))
+        pytest.fail("A failed required source must not produce an answer")
+
+    strategy.initiate_agent_flow = provider_flow
+    with (
+        patch.object(hosted.AgentStrategyFactory, "get_strategy", AsyncMock(return_value=strategy)),
+        patch.object(lite, "get_retrieval_backend", return_value="foundry_iq"),
+        patch.object(foundry, "get_foundry_iq_client", return_value=remote),
+    ):
+        response = _post(
+            protected_host, protocol, headers={"x-client-search-token": _TOKEN}, stream=stream,
+        )
+    assert response.status_code == 200
+    frames = [
+        json.loads(line[5:].strip()) for line in response.text.splitlines()
+        if line.startswith("data:") and line[5:].strip() != "[DONE]"
+    ]
+    errors = [
+        frame["response"]["error"] if frame["type"] == "response.failed" else frame
+        for frame in frames if frame["type"] in {"error", "response.failed"}
+    ]
+    if protocol == "responses" and not stream:
+        assert response.json()["status"] == "failed"
+        assert response.json()["output"] == []
+        errors = [response.json()["error"]]
+    assert len(errors) == 1
+    assert errors[0]["code"] == ("interaction_required" if challenge else "source_denied")
+    assert errors[0].get("claims_challenge") == (CLAIMS if challenge else None)
+    assert not any(frame["type"] == "response.completed" for frame in frames)
+    assert ("synthetic partial output" in response.text) == (partial and stream)
+    assert strategy.delegated_retrieval is None
+    store = protected_host.app._responses_provider
+    assert store._entries == {} and store._item_store == {} and store._stream_events == {}
+    assert _TOKEN not in response.text + caplog.text
+    assert "synthetic-sensitive-provider-body" not in response.text + caplog.text
+    assert "synthetic-mfa" not in caplog.text
 
 
 @pytest.mark.parametrize("protocol", ["responses", "invocations"])

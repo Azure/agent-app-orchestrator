@@ -23,7 +23,7 @@ from agent_framework import ChatMessage, Context, ContextProvider, Role
 
 from connectors.foundry_iq import get_foundry_iq_client
 from connectors.obo import (
-    DelegatedRetrievalCredentials, RetrievalAuthorizationMode,
+    DelegatedRetrievalCredentials, HostedRetrievalError, RetrievalAuthorizationMode,
     require_retrieval_token, resolve_retrieval_authorization,
 )
 from connectors.search import _classify_retrieval_error
@@ -183,6 +183,8 @@ class FoundryIQContextProvider(ContextProvider):
                 },
             )
             if self._delegated_retrieval is not None:
+                if isinstance(e, HostedRetrievalError):
+                    raise
                 raise RuntimeError("Protected retrieval failed") from None
             raise
 

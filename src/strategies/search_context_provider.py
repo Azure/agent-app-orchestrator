@@ -16,11 +16,12 @@ from typing import Any, Optional
 
 from agent_framework import ChatMessage, Context, ContextProvider, Role
 from azure.core.credentials_async import AsyncTokenCredential
+from azure.core.exceptions import HttpResponseError
 from azure.search.documents.aio import SearchClient
 from azure.search.documents.models import VectorizedQuery, QueryType, QueryCaptionType
 
 from connectors.search import _classify_retrieval_error, build_conversation_filter
-from connectors.obo import RetrievalAuthorizationMode, require_retrieval_token
+from connectors.obo import HostedRetrievalError, RetrievalAuthorizationMode, require_retrieval_token
 from dependencies import get_config
 from util.metadata import format_custom_metadata, parse_allowed_keys
 from telemetry import AuditEmitter, ReasonCode
@@ -203,6 +204,14 @@ class SearchContextProvider(ContextProvider):
                 },
             )
             if self._native_permissions:
+                if isinstance(e, HostedRetrievalError):
+                    raise
+                if isinstance(e, HttpResponseError) and e.response is not None:
+                    auth_error = HostedRetrievalError.from_response(
+                        e.status_code, e.response.headers.items(),
+                    )
+                    if auth_error is not None:
+                        raise auth_error from None
                 raise RuntimeError("Protected Search retrieval failed") from None
             raise
 
