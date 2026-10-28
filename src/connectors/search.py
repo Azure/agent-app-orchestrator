@@ -19,6 +19,7 @@ from util.retrieval_backend import get_retrieval_backend, RETRIEVAL_BACKEND_FOUN
 from connectors.foundry_iq import McpSourceError, get_foundry_iq_client
 from connectors.foundry_iq_mcp import McpConfigurationError, McpCredentialError
 from connectors.obo import (
+    DelegatedRetrievalCredentials,
     acquire_obo_token as _acquire_obo_token,
     classify_retrieval_error as _classify_retrieval_error,
 )
@@ -101,9 +102,21 @@ def build_conversation_owner_clause(
     *,
     field_name: str = "conversationId",
     owner_field: str = CONVERSATION_OWNER_FIELD,
+    native_permissions: bool = False,
 ) -> Optional[str]:
     """Build the clause matching conversation uploads stamped for ``owner_id``."""
     cid = (conversation_id or "").strip()
+    if native_permissions:
+        if not cid or cid == "NaN":
+            raise ValueError("Protected upload retrieval requires a conversation ID")
+        # Only the pinned uploader-only ingestion shape is eligible. Native
+        # Search, not a context/platform ID, matches its userIds permissions.
+        return (
+            f"({field_name} eq '{_odata_escape_string(cid)}'"
+            f" and {owner_field}/any()"
+            " and not metadata_security_group_ids/any()"
+            " and (metadata_security_rbac_scope eq '' or metadata_security_rbac_scope eq null))"
+        )
     owner = (owner_id or "").strip()
     if not cid or not owner:
         return None
@@ -124,6 +137,7 @@ def build_conversation_filter(
     field_name: str = "conversationId",
     owner_id: Optional[str] = None,
     owner_field: str = CONVERSATION_OWNER_FIELD,
+    native_permissions: bool = False,
 ) -> str:
     """Build OData filter for conversation-scoped retrieval.
 
@@ -135,6 +149,9 @@ def build_conversation_filter(
       conversationId is the 'NaN' sentinel OR null/unset. Ingestion has used
       both representations for global corpora, so both must match here,
       otherwise globally-ingested documents become invisible to retrieval.
+
+    Native permissions instead require a conversation ID and the pinned
+    uploader-only ACL row shape; Search evaluates those ACLs with the user token.
     """
     safe_field = (field_name or "").strip() or "conversationId"
     shared_clause = f"({safe_field} eq 'NaN' or {safe_field} eq null)"
@@ -143,6 +160,7 @@ def build_conversation_filter(
         owner_id,
         field_name=safe_field,
         owner_field=owner_field,
+        native_permissions=native_permissions,
     )
     if owned_clause:
         return f"{owned_clause} or {shared_clause}"
@@ -242,6 +260,7 @@ class SearchClient:
         allow_anonymous: bool,
         conversation_id: Optional[str] = None,
         user_context: Optional[Dict[str, Any]] = None,
+        delegated_retrieval: DelegatedRetrievalCredentials | None = None,
     ) -> None:
         """Sets per-request context used for permission trimming.
 
@@ -249,6 +268,10 @@ class SearchClient:
         It is used as the OBO assertion to acquire a Search-audience user token.
         """
         api_access_token = (api_access_token or "").strip() or None
+        if delegated_retrieval is not None and (
+            not conversation_id or not conversation_id.strip() or conversation_id.strip() == "NaN"
+        ):
+            raise ValueError("Protected upload retrieval requires a conversation ID")
         if api_access_token != self._request_api_access_token:
             # Token changed (new request); drop cached OBO token.
             self._cached_search_user_token = None
@@ -258,6 +281,9 @@ class SearchClient:
         self._allow_anonymous = bool(allow_anonymous)
         self._conversation_id = (conversation_id or "").strip() or None
         self._user_context = dict(user_context or {})
+        self._delegated_retrieval = delegated_retrieval
+        if delegated_retrieval is not None:
+            self._allow_anonymous = False
 
 
     def _token_fingerprint(self, token: Optional[str]) -> str:
@@ -380,6 +406,9 @@ class SearchClient:
                 return token
 
     async def _get_search_user_token_for_trimming(self) -> Optional[str]:
+        delegated = getattr(self, "_delegated_retrieval", None)
+        if delegated is not None:
+            return delegated.search_token
         # Use cached token if still valid.
         if self._cached_search_user_token and time.time() < self._cached_search_user_token_expires_at:
             return self._cached_search_user_token
@@ -459,6 +488,8 @@ class SearchClient:
         async with session.post(url, headers=headers, json=body) as resp:
                 text = await resp.text()
                 if resp.status >= 400:
+                    if getattr(self, "_delegated_retrieval", None) is not None:
+                        raise RuntimeError(f"Protected Search failed: {resp.status}")
                     logging.error(f"[search] {resp.status} {text}")
                     raise RuntimeError(f"Search failed: {resp.status} {text}")
                 return await resp.json()
@@ -621,7 +652,10 @@ class SearchClient:
 
             # Filter by conversation scope: this chat + shared corpora (general/global).
             # Never query without a filter: an unset id would return every chunk in the index.
-            search_body["filter"] = build_conversation_filter(self._conversation_id, field_name="conversationId")
+            search_body["filter"] = build_conversation_filter(
+                self._conversation_id, field_name="conversationId",
+                native_permissions=getattr(self, "_delegated_retrieval", None) is not None,
+            )
 
             # Generate embeddings for vector/hybrid search
             if self.search_approach in ["vector", "hybrid"] and self.aoai_client:
@@ -749,6 +783,8 @@ class SearchClient:
 
             # In strict mode (ALLOW_ANONYMOUS=false), do not silently degrade.
             # Raise so the request fails early and the logs make the root cause obvious.
+            if getattr(self, "_delegated_retrieval", None) is not None:
+                raise RuntimeError("Protected Search retrieval failed") from None
             if not self._allow_anonymous:
                 raise
 
@@ -776,10 +812,21 @@ class SearchClient:
         mcp_enabled = False
         try:
             client = get_foundry_iq_client()
+            delegated = getattr(self, "_delegated_retrieval", None)
             mcp_enabled = bool(
                 getattr(getattr(client, "mcp_config", None), "enabled", False)
             )
-            if mcp_enabled:
+            if delegated is not None:
+                search_user_token = delegated.search_token
+                records = await client.retrieve(
+                    query,
+                    obo_token=search_user_token,
+                    conversation_id=conversation_id,
+                    user_context=user_context,
+                    native_permissions=True,
+                    work_iq_assertion=delegated.work_iq_assertion,
+                )
+            elif mcp_enabled:
                 search_user_token = await acquire_obo_search_token(
                     incoming_token,
                     allow_anonymous=allow_anonymous,
@@ -854,6 +901,8 @@ class SearchClient:
                     "retrieval_credential_type": "obo" if search_user_token else "managed_identity",
                 },
             )
+            if getattr(self, "_delegated_retrieval", None) is not None:
+                raise RuntimeError("Protected knowledge retrieval failed") from None
             if isinstance(e, McpConfigurationError):
                 raise
             if mcp_enabled and isinstance(

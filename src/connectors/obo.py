@@ -5,8 +5,12 @@ import json
 import logging
 import time
 from enum import Enum
+from dataclasses import dataclass, field
+from collections.abc import Mapping
 from collections.abc import Awaitable, Callable
 from typing import Any, Optional
+from uuid import UUID
+from urllib.parse import urlsplit
 
 import aiohttp
 
@@ -15,6 +19,175 @@ from dependencies import get_config
 
 _obo_cache: dict[str, Any] = {}
 _MAX_OBO_CACHE_ENTRIES = 256
+
+
+@dataclass(frozen=True, slots=True)
+class DelegatedRetrievalCredentials:
+    """Opaque, already-issued credentials. Never serialize or use as API assertions."""
+
+    search_token: str = field(repr=False)
+    work_iq_assertion: str | None = field(default=None, repr=False)
+
+    def __reduce__(self) -> Any:
+        raise TypeError("Delegated retrieval credentials cannot be persisted")
+
+
+class HostedRetrievalError(ValueError):
+    """Safe HTTP-boundary failure with no credential or provider payload."""
+
+    def __init__(self, message: str, status_code: int = 401) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def _config_enabled(cfg: Any, key: str, default: bool = False) -> bool:
+    value = cfg.get(key, default, type=bool)
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"true", "1", "yes", "on"}
+
+
+def hosted_search_enabled(cfg: Any) -> bool:
+    """Honor intentionally disabled or unconfigured search-only chat deployments."""
+    if not _config_enabled(cfg, "SEARCH_RETRIEVAL_ENABLED", True):
+        return False
+    return bool(
+        (cfg.get("SEARCH_SERVICE_QUERY_ENDPOINT") and cfg.get("SEARCH_RAG_INDEX_NAME"))
+        or (cfg.get("KNOWLEDGE_BASE_ENDPOINT") and cfg.get("KNOWLEDGE_BASE_NAME"))
+    )
+
+
+def validate_work_iq_configuration(cfg: Any) -> None:
+    """Validate published source-auth IDs, never the opaque user assertion.
+
+    The platform owns registration/consent and maps these IDs to the source's
+    entraAppAuthentication. The BFF requests api://<application ID>/access_as_user.
+    """
+    for key in ("WORK_IQ_APPLICATION_ID", "WORK_IQ_TENANT_ID"):
+        value = cfg.get(key, "")
+        if key == "WORK_IQ_TENANT_ID" and not value:
+            continue
+        try:
+            UUID(value)
+        except (ValueError, TypeError, AttributeError):
+            raise HostedRetrievalError(f"Invalid or missing {key}", 503) from None
+    federation = cfg.get("WORK_IQ_FEDERATED_CREDENTIAL_ID", "")
+    if (
+        not isinstance(federation, str)
+        or not federation
+        or len(federation) > 256
+        or any(not (char.isascii() and (char.isalnum() or char in "._-")) for char in federation)
+    ):
+        raise HostedRetrievalError("Invalid or missing WORK_IQ_FEDERATED_CREDENTIAL_ID", 503)
+
+
+def validate_indexed_sharepoint_configuration(cfg: Any) -> None:
+    """Validate secretless ingestion settings; Search's user token owns query ACLs."""
+    if cfg.get("FOUNDRY_IQ_API_VERSION", "2026-05-01-preview") != "2026-08-01-preview":
+        raise HostedRetrievalError("Protected indexedSharePoint requires 2026-08-01-preview", 503)
+    for key in (
+        "SHAREPOINT_INDEXED_APPLICATION_ID",
+        "SHAREPOINT_INDEXED_FEDERATED_CREDENTIAL_APPLICATION_ID",
+        "SHAREPOINT_INDEXED_TENANT_ID",
+    ):
+        try:
+            UUID(cfg.get(key, ""))
+        except (ValueError, TypeError, AttributeError):
+            raise HostedRetrievalError(f"Invalid or missing {key}", 503) from None
+    try:
+        raw_site = cfg.get("SHAREPOINT_INDEXED_SITE_URL", "")
+        if not isinstance(raw_site, str) or any(char.isspace() for char in raw_site):
+            raise ValueError("Invalid site URL")
+        site = urlsplit(raw_site)
+        valid_site = (
+            site.scheme == "https" and bool(site.hostname)
+            and site.port in (None, 443)
+            and not site.username and not site.password
+            and not site.query and not site.fragment
+        )
+    except ValueError:
+        valid_site = False
+    if not valid_site:
+        raise HostedRetrievalError("Invalid or missing SHAREPOINT_INDEXED_SITE_URL", 503)
+    name = cfg.get("SHAREPOINT_INDEXED_KNOWLEDGE_SOURCE_NAME", "") or ""
+    alias = cfg.get("SHAREPOINT_INDEXED_KS_NAME", "") or ""
+    if (
+        not isinstance(name, str) or not isinstance(alias, str)
+        or not (name or alias).strip()
+        or (name and alias and name.strip() != alias.strip())
+    ):
+        raise HostedRetrievalError("Missing or conflicting indexedSharePoint knowledge source name", 503)
+
+
+def resolve_hosted_retrieval(
+    cfg: Any, headers: Mapping[str, str],
+    conversation_id: str | None = None, *, validate_conversation: bool = True,
+) -> DelegatedRetrievalCredentials | None:
+    """Validate forwarded credentials before streaming, without decoding tokens.
+
+    The BFF owns acquisition, consent, and lifetime. Foundry transports x-client-*
+    headers; these are credentials, not platform-signed principal claims.
+    """
+    if not hosted_search_enabled(cfg):
+        return None
+    mode = cfg.get(
+        "RETRIEVAL_AUTH_MODE",
+        "native_search" if not _config_enabled(cfg, "ALLOW_ANONYMOUS", True) else "",
+    )
+    supplied = any(key.lower() == "x-client-search-token" for key in headers)
+    if not mode and not supplied:
+        return None
+    if mode not in ("", "native_search"):
+        raise HostedRetrievalError("Unsupported hosted retrieval authorization mode", 503)
+    if any(
+        _config_enabled(cfg, key)
+        for key in (
+            "WORK_IQ_ENABLED", "FABRIC_IQ_ENABLED", "FABRIC_DATA_AGENT_ENABLED",
+            "SHAREPOINT_REMOTE_ENABLED", "SHAREPOINT_INDEXED_ENABLED",
+            "ONELAKE_KS_ENABLED", "WEB_GROUNDING_ENABLED",
+        )
+    ) and str(cfg.get("RETRIEVAL_BACKEND", "ai_search")).strip().lower() != "foundry_iq":
+        raise HostedRetrievalError("Configured knowledge sources require foundry_iq retrieval", 503)
+    if _config_enabled(cfg, "WORK_IQ_ENABLED"):
+        validate_work_iq_configuration(cfg)
+    if _config_enabled(cfg, "SHAREPOINT_INDEXED_ENABLED"):
+        validate_indexed_sharepoint_configuration(cfg)
+    if _config_enabled(cfg, "FOUNDRY_IQ_MCP_ENABLED"):
+        raise HostedRetrievalError(
+            "Protected MCP sources require a verified source-specific delegation contract", 503
+        )
+
+    def read(name: str, required: bool) -> str | None:
+        values = [value for key, value in headers.items() if key.lower() == name]
+        if not values and not required:
+            return None
+        if len(values) != 1:
+            raise HostedRetrievalError("Required delegated retrieval credential unavailable")
+        value = values[0]
+        if len(value.encode("utf-8")) > 8192:
+            raise HostedRetrievalError("Delegated retrieval credential exceeds header limit", 431)
+        if not value or any(ord(char) <= 32 or ord(char) >= 127 for char in value):
+            raise HostedRetrievalError("Malformed delegated retrieval credential")
+        return value
+
+    search = read("x-client-search-token", True)
+    work_iq = read(
+        "x-client-work-iq-assertion", _config_enabled(cfg, "WORK_IQ_ENABLED")
+    )
+    kind = cfg.get("FOUNDRY_IQ_KNOWLEDGE_SOURCE_KIND") or cfg.get("FOUNDRY_IQ_PATTERN")
+    upload_index = (
+        _config_enabled(cfg, "FOUNDRY_IQ_CONVERSATION_UPLOAD_ENABLED")
+        or cfg.get("RETRIEVAL_BACKEND", "ai_search") == "ai_search"
+        or kind == "searchIndex"
+        or (not kind and _config_enabled(cfg, "FOUNDRY_IQ_FILTER_ADD_ON_ENABLED"))
+    )
+    if validate_conversation and upload_index and (
+        not isinstance(conversation_id, str)
+        or not conversation_id.strip() or conversation_id.strip() == "NaN"
+    ):
+        raise HostedRetrievalError("Protected upload retrieval requires a conversation ID", 422)
+    assert search is not None
+    return DelegatedRetrievalCredentials(search, work_iq)
 
 
 class RetrievalAuthorizationMode(str, Enum):

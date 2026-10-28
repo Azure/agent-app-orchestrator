@@ -46,6 +46,7 @@ class SearchContextProvider(ContextProvider):
         get_obo_token: Callable[[], Awaitable[Optional[str]]] | None = None,
         authorization_mode: RetrievalAuthorizationMode = RetrievalAuthorizationMode.USER_REQUIRED,
         owner_id: Optional[str] = None,
+        native_permissions: bool = False,
     ) -> None:
         self._endpoint = endpoint
         self._index_name = index_name
@@ -59,6 +60,7 @@ class SearchContextProvider(ContextProvider):
         self._max_content_chars = max_content_chars
         self._get_obo_token = get_obo_token
         self._authorization_mode = authorization_mode
+        self._native_permissions = native_permissions
 
     async def __aenter__(self):
         return self
@@ -104,7 +106,8 @@ class SearchContextProvider(ContextProvider):
         # Conversation scoping: only this caller's chunks in this conversation
         # plus shared/global chunks.
         search_params["filter"] = build_conversation_filter(
-            self._conversation_id, owner_id=self._owner_id, field_name="conversationId"
+            self._conversation_id, owner_id=self._owner_id, field_name="conversationId",
+            native_permissions=self._native_permissions,
         )
 
         # Hybrid search: add vector query when embedding function is available
@@ -199,6 +202,8 @@ class SearchContextProvider(ContextProvider):
                     "retrieval_credential_type": "obo" if obo_token else "managed_identity",
                 },
             )
+            if self._native_permissions:
+                raise RuntimeError("Protected Search retrieval failed") from None
             raise
 
         logger.info("[SearchContextProvider] Search returned %d documents in %.2fs", len(parts), time.time() - search_start)

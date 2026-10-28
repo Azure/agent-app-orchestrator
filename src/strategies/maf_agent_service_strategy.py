@@ -217,6 +217,8 @@ Guidelines:
 
     async def _create_search_provider(self) -> Optional[SearchContextProvider]:
         """Create the search context provider for retrieval."""
+        if not self.cfg.get("SEARCH_RETRIEVAL_ENABLED", True, type=bool):
+            return None
         if not self.search_endpoint:
             logging.debug("[MafAgentServiceStrategy] No search endpoint configured, skipping search")
             return None
@@ -233,6 +235,9 @@ Guidelines:
             )
             retrieval_backend = get_retrieval_backend()
             token = getattr(self, "request_access_token", None)
+            delegated = getattr(self, "delegated_retrieval", None)
+            if delegated is not None:
+                allow_anonymous = False
             authorization_mode = resolve_retrieval_authorization(token, allow_anonymous)
             mcp_enabled = (
                 retrieval_backend == RETRIEVAL_BACKEND_FOUNDRY_IQ
@@ -244,6 +249,8 @@ Guidelines:
             )
 
             async def _get_obo_token() -> str | None:
+                if delegated is not None:
+                    return delegated.search_token
                 return (
                     await acquire_obo_search_token(
                         token,
@@ -267,6 +274,7 @@ Guidelines:
                     allow_anonymous=allow_anonymous,
                     mcp_enabled=mcp_enabled,
                     user_context=self.user_context,
+                    delegated_retrieval=delegated,
                 )
                 logging.info(
                     "[MafAgentServiceStrategy] FoundryIQContextProvider created (top_k=%d)",
@@ -283,6 +291,7 @@ Guidelines:
                 semantic_configuration_name=self.semantic_search_config,
                 get_obo_token=_get_obo_token,
                 authorization_mode=authorization_mode,
+                **({"native_permissions": True} if delegated is not None else {}),
             )
             logging.info(
                 "[MafAgentServiceStrategy] SearchContextProvider created (index=%s)",
