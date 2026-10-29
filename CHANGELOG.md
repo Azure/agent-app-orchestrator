@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Shared repository protection standard.** Require pull requests and passing
+  quality, behavior and frontend checks without mandatory second-person review.
+  Restrict the workflow integrity guard to the quality pipeline instead of
+  unrelated automations, preserve evaluator and policy protections, and route
+  ownership to the maintainer without requesting another reviewer.
+
 ### Fixed
 
 - **Immutable GitHub Actions references.** Pin the remaining workflow actions
