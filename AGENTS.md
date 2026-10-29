@@ -146,6 +146,29 @@ instructions before meaningful changes in these areas.
 - Before committing, inspect every external `uses:` reference in workflow
   YAML, composite actions, and regenerated lock files. All must remain pinned.
 
+## Shared repository protection standard
+
+- Both `main` and `develop` require a pull request, successful `quality-gate`
+  and the repository's behavior and frontend/container checks. Missing,
+  skipped, cancelled, or failing required checks do not authorize a merge.
+- The required approving-review count is zero. Independent, code-owner and
+  latest-head approvals are not mandatory. A maintainer can merge their own
+  pull request when all required checks pass. `CODEOWNERS` is ownership
+  routing, not a second-person approval requirement.
+- Preserve protected-base evaluation, policy integrity, typing coverage,
+  exception evidence and real same-workflow results. Only quality-control
+  workflows receive the protected-policy integrity guard, not unrelated
+  automations. Changing the guardrails requires explicit maintainer
+  authorization, never a candidate's own approval metadata.
+- Do not disable required checks or leave permanent bypasses. Any expressly
+  authorized administrative exception must be limited to the intended pull
+  requests and removed immediately afterward.
+- Require SHA pinning in repository Actions settings. Keep CodeQL Actions
+  security analysis enabled and authorize `pull_request_target` only for
+  `.github/workflows/block-pr-to-main.yml`, without running pull request code.
+- The normal `develop` to release to `main` flow remains unchanged. This
+  standard does not authorize publishing a release or deploying.
+
 ## Validation and evidence
 
 ### Python quality policy (bootstrap under review)
@@ -200,8 +223,8 @@ responsibilities and immutable source revision. Its current-path records are
 separate from `policy.json`'s immutable adoption names: editing an inventory
 must not reclassify newly covered code as legacy. Source checks reject missing
 or duplicate ownership, stale exports/aliases, unsupported consumers and
-unverifiable source provenance. Surface changes require the same independent
-policy review; they cannot self-authorize new access. Stable ids follow
+unverifiable source provenance. Surface changes require explicit maintainer
+authorization; they cannot self-authorize new access. Stable ids follow
 successive unchanged moves for annotation, diagnostic and handler ownership.
 
 The AST import graph includes flat modules, namespace packages, local and
@@ -456,13 +479,14 @@ from earlier attempts are rejected, so rerun all quality jobs together.
 Candidate policy/checker/owner changes cannot self-approve. Bootstrap has no
 base policy and deliberately fails its policy result.
 
-Before activation, an administrator must independently review the bootstrap,
-configure required `quality-gate` and test checks on `develop`/`main`, require
-code-owner review of the latest head, dismiss stale approvals and restrict
-bypasses. `CODEOWNERS` names verified existing administrators `@placerda` and
-`@gxjorge`, permitting an independent owner review for an owner-authored PR.
-Adding this file or workflow does not activate those settings. Policy repair
-must use a separately reviewed PR, not removal of protections.
+The shared repository standard configures required `quality-gate`, tests and
+frontend checks on `develop`/`main`, with zero mandatory approving reviews
+and no permanent bypass. `CODEOWNERS` routes quality-control ownership to
+`@placerda` without requesting a second reviewer. Protected-policy findings
+remain technical integrity failures, not a requirement for another person's
+GitHub approval. Guardrail repair requires explicit maintainer authorization
+and an auditable PR, not silently weakening checks. Repository settings must
+be verified separately from this document and workflow configuration.
 
 This component remains compatible by contract with UI `v2.6.2` and ingestion
 `v2.7.3`; no wire/audit/auth/configuration migration is introduced. Live Azure

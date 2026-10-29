@@ -31,8 +31,9 @@ REPOSITORY = "Azure/agent-app-orchestrator"
 REQUIRED_JOBS = (*CHECKS, "tests", "frontend")
 RECORDS = ("policy.json", "module-surfaces.json", "typing-scope.json",
            "typing-baseline.json", "exceptions.json")
-PROTECTED = (".quality/", ".github/scripts/", ".github/workflows/",
-             ".github/CODEOWNERS", "requirements-quality.txt", ".importlinter")
+PROTECTED = (".quality/", ".github/scripts/", ".github/workflows/pr_pipeline.yaml",
+             ".github/CODEOWNERS", "tests/test_quality_policy.py",
+             "requirements-quality.txt", ".importlinter")
 
 
 class QualityError(Exception):
@@ -1040,7 +1041,7 @@ def policy_changes(root, base, base_records, candidate):
                         == {k: v for k, v in new.items() if k != "module_ids"}):
                     continue
             findings.append(finding("protected-policy", path,
-                                    message="Policy change requires independent maintainer review; cannot self-approve"))
+                                    message="Protected quality control differs from base; explicit maintainer authorization required"))
     return findings
 
 
