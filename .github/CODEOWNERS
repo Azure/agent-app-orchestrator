@@ -1,10 +1,10 @@
-# Verified repository administrators. Required/latest-head reviews must be
-# activated separately; this file is not a repository-settings change.
-/.quality/ @placerda @gxjorge
-/.importlinter @placerda @gxjorge
-/pyproject.toml @placerda @gxjorge
-/requirements-quality.txt @placerda @gxjorge
-/.github/scripts/ @placerda @gxjorge
-/.github/workflows/ @placerda @gxjorge
-/.github/CODEOWNERS @placerda @gxjorge
-/tests/test_quality_policy.py @placerda @gxjorge
+# Ownership routing only. The shared repository standard does not require
+# independent, code-owner, or latest-head approval.
+/.quality/ @placerda
+/.importlinter @placerda
+/pyproject.toml @placerda
+/requirements-quality.txt @placerda
+/.github/scripts/ @placerda
+/.github/workflows/pr_pipeline.yaml @placerda
+/.github/CODEOWNERS @placerda
+/tests/test_quality_policy.py @placerda
