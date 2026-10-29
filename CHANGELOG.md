@@ -12,6 +12,9 @@
 
 ### Fixed
 
+- **Explicit deployment workflow permissions.** Limit the manual dev workflow's
+  GitHub token to repository content read access without changing Azure
+  credentials, deployment steps or its manual-only trigger.
 - **Immutable GitHub Actions references.** Pin the remaining workflow actions
   to verified full-length commit SHAs without changing their selected versions,
   and require agents to preserve SHA pinning when editing or regenerating CI.
