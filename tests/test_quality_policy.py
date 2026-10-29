@@ -498,7 +498,8 @@ def policy_repo(tmp_path):
         path = tmp_path / ".quality" / name
         path.parent.mkdir(exist_ok=True)
         path.write_text(json.dumps(data))
-    for name in (".github/scripts/check-quality.py", ".github/CODEOWNERS"):
+    for name in (".github/scripts/check-quality.py", ".github/CODEOWNERS",
+                 ".github/workflows/pr_pipeline.yaml", "tests/test_quality_policy.py"):
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# protected\n")
@@ -509,6 +510,8 @@ def policy_repo(tmp_path):
 
 @pytest.mark.parametrize("path,text", [
     (".github/scripts/check-quality.py", "print('passed')"),
+    (".github/workflows/pr_pipeline.yaml", "jobs: {}\n"),
+    ("tests/test_quality_policy.py", "# no quality tests\n"),
     (".github/CODEOWNERS", "# no owners"),
     (".quality/typing-scope.json", '{"module_ids": ["a"], "schema_version": 1}'),
     (".quality/typing-baseline.json",
@@ -535,12 +538,23 @@ def test_monotonic_scope_expansion_and_debt_retirement_are_allowed(policy_repo):
     assert not QUALITY["policy_changes"](root, base, records, candidate)
 
 
-def test_untracked_policy_file_cannot_avoid_review(policy_repo):
+def test_untracked_policy_file_cannot_avoid_integrity_guard(policy_repo):
     root, base, records = policy_repo
     path = root / ".github/scripts/new-policy.py"
     path.write_text("# candidate-owned evaluator\n")
     findings = QUALITY["policy_changes"](root, base, records, records)
     assert [f["path"] for f in findings] == [".github/scripts/new-policy.py"]
+
+
+@pytest.mark.parametrize("path", [
+    ".github/workflows/issue-type-classifier.lock.yml",
+    ".github/workflows/validate-agentic-assets.yml",
+    ".github/workflows/other-automation.yml",
+])
+def test_non_quality_workflows_do_not_trigger_protected_policy_veto(policy_repo, path):
+    root, base, records = policy_repo
+    (root / path).write_text("jobs: {}\n")
+    assert not QUALITY["policy_changes"](root, base, records, records)
 
 
 @pytest.mark.parametrize("statement", [
