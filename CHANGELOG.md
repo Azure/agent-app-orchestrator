@@ -21,6 +21,8 @@
   releases and refresh dashboard tooling and transitive dependencies. Vite 6
   replaces the vulnerable Vite 5 dashboard toolchain. A scoped patched
   selector-parser override removes Tailwind typography's vulnerable pin.
+  Pair hosted responses 2.0.0b1 with core SDK 2.2.0 so clean installs retain
+  the experimental API required by the pinned response adapter.
 - **Bounded deletion diagnostics.** Log confirmed conversation deletion
   without interpolating user-controlled conversation or principal IDs.
 - **Explicit deployment workflow permissions.** Limit the manual dev workflow's
