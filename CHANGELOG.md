@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [v5.3.1] - 2026-10-30
+
 ### Changed
 
 - **Reviewed dependency maintenance.** Adopt OpenAI SDK 3.24, pyodbc 5.3 and
