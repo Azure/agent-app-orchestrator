@@ -4,6 +4,10 @@
 
 ### Changed
 
+- **Reviewed dependency maintenance.** Adopt OpenAI SDK 3.24, pyodbc 5.3 and
+  React Refresh lint plugin 0.5.5 with matching dependency manifests and
+  generated frontend lock. Retain the compatible Agent Framework, Search,
+  Azure Monitor, MSAL and Tailwind dependency families.
 - **Prompt template escaping.** Enable Jinja autoescaping for local prompt
   templates and reusable agent instructions. Substituted markup and special
   characters are now entity-encoded; literal template text and strict missing
