@@ -72,6 +72,7 @@ def _render_agent_instructions(cfg, *, aisearch_enabled: bool) -> str:
     prompt_dir = src_folder / "prompts" / "single_agent_rag"
     env = Environment(
         loader=FileSystemLoader(str(prompt_dir)),
+        autoescape=True,
         undefined=StrictUndefined,
         trim_blocks=True,
         lstrip_blocks=True,
