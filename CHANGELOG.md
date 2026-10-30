@@ -1,5 +1,41 @@
 # Changelog
 
+## [v5.3.1] - 2026-10-30
+
+### Changed
+
+- **Reviewed dependency maintenance.** Adopt OpenAI SDK 3.24, pyodbc 5.3 and
+  React Refresh lint plugin 0.5.5 with matching dependency manifests and
+  generated frontend lock. Retain the compatible Agent Framework, Search,
+  Azure Monitor, MSAL and Tailwind dependency families.
+- **Prompt template escaping.** Enable Jinja autoescaping for local prompt
+  templates and reusable agent instructions. Substituted markup and special
+  characters are now entity-encoded; literal template text and strict missing
+  variable checks remain unchanged. Review prompt expectations for those
+  values when adopting this security update.
+- **Shared repository protection standard.** Require pull requests and passing
+  quality, behavior and frontend checks without mandatory second-person review.
+  Restrict the workflow integrity guard to the quality pipeline instead of
+  unrelated automations, preserve evaluator and policy protections, and route
+  ownership to the maintainer without requesting another reviewer.
+
+### Fixed
+
+- **Security dependency updates.** Upgrade aiohttp and PyJWT to patched
+  releases and refresh dashboard tooling and transitive dependencies. Vite 6
+  replaces the vulnerable Vite 5 dashboard toolchain. A scoped patched
+  selector-parser override removes Tailwind typography's vulnerable pin.
+  Pair hosted responses 2.0.0b1 with core SDK 2.2.0 so clean installs retain
+  the experimental API required by the pinned response adapter.
+- **Bounded deletion diagnostics.** Log confirmed conversation deletion
+  without interpolating user-controlled conversation or principal IDs.
+- **Explicit deployment workflow permissions.** Limit the manual dev workflow's
+  GitHub token to repository content read access without changing Azure
+  credentials, deployment steps or its manual-only trigger.
+- **Immutable GitHub Actions references.** Pin the remaining workflow actions
+  to verified full-length commit SHAs without changing their selected versions,
+  and require agents to preserve SHA pinning when editing or regenerating CI.
+
 ## [v5.3.0] - 2026-10-28
 
 ### Added
