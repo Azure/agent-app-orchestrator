@@ -24,6 +24,32 @@ from test_primary_strategy_failure_boundaries import main_module
 MARKER = "synthetic-private-http-provider-detail"
 
 
+async def test_deletion_logs_no_user_controlled_identifiers(
+    main_module, monkeypatch, caplog,
+):
+    principal = "synthetic-user\r\nforged-principal-record"
+    conversation = "synthetic-conversation\nforged-conversation-record"
+    monkeypatch.setattr(
+        main_module, "validate_user_access", AsyncMock(return_value=principal)
+    )
+    read = AsyncMock(return_value={"principal_id": principal})
+    delete = AsyncMock(return_value={"deleted": True})
+    monkeypatch.setattr(main_module, "read_user_conversation", read)
+    monkeypatch.setattr(main_module, "soft_delete_conversation", delete)
+    caplog.set_level(logging.INFO)
+
+    result = await main_module.delete_conversation(
+        conversation, authorization="synthetic-authorization"
+    )
+
+    assert result["status"] == "success"
+    read.assert_awaited_once_with(conversation, principal)
+    delete.assert_awaited_once_with(conversation, principal)
+    assert "[DeleteConversation] Conversation deleted successfully" in caplog.text
+    assert "forged-principal-record" not in caplog.text
+    assert "forged-conversation-record" not in caplog.text
+
+
 @pytest.fixture
 def actual_config(monkeypatch):
     monkeypatch.setenv("allow_environment_variables", "false")

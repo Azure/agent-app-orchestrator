@@ -82,6 +82,16 @@ before choosing a topology.
 
 ## Contributing
 
+### Adopting the security maintenance update
+
+The security update on the source branches enables Jinja autoescaping for
+prompt context substitutions and reusable agent instructions. Literal template
+markup is unchanged, but substituted `<`, `>`, `&` and quotes are entity-encoded.
+Missing variables still fail rendering. Review custom prompt expectations for
+these values before adopting the update. HTML escaping is not a prompt-injection
+defense or a replacement for the existing authorization and retrieval controls.
+Merging this source update does not deploy or update a running agent.
+
 Updating `develop` does not deploy to Azure. Dev deployment is opt-in through
 the **Manual Dev Deployment** workflow in GitHub Actions; run it explicitly
 against the intended branch only when a deployment is authorized.
