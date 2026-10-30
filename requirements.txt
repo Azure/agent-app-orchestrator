@@ -10,6 +10,7 @@ azure.appconfiguration.provider
 azure-ai-projects==2.0.0b3
 azure-ai-agents>=1.2.0b4
 azure-ai-agentserver-responses==2.0.0b1
+azure-ai-agentserver-core==2.2.0
 azure-search-documents==11.7.0b2
 
 # AI and NLP dependencies
