@@ -4,6 +4,11 @@
 
 ### Changed
 
+- **Prompt template escaping.** Enable Jinja autoescaping for local prompt
+  templates and reusable agent instructions. Substituted markup and special
+  characters are now entity-encoded; literal template text and strict missing
+  variable checks remain unchanged. Review prompt expectations for those
+  values when adopting this security update.
 - **Shared repository protection standard.** Require pull requests and passing
   quality, behavior and frontend checks without mandatory second-person review.
   Restrict the workflow integrity guard to the quality pipeline instead of
@@ -12,6 +17,14 @@
 
 ### Fixed
 
+- **Security dependency updates.** Upgrade aiohttp and PyJWT to patched
+  releases and refresh dashboard tooling and transitive dependencies. Vite 6
+  replaces the vulnerable Vite 5 dashboard toolchain. A scoped patched
+  selector-parser override removes Tailwind typography's vulnerable pin.
+  Pair hosted responses 2.0.0b1 with core SDK 2.2.0 so clean installs retain
+  the experimental API required by the pinned response adapter.
+- **Bounded deletion diagnostics.** Log confirmed conversation deletion
+  without interpolating user-controlled conversation or principal IDs.
 - **Explicit deployment workflow permissions.** Limit the manual dev workflow's
   GitHub token to repository content read access without changing Azure
   credentials, deployment steps or its manual-only trigger.

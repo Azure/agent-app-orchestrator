@@ -2117,7 +2117,7 @@
       "symbol": "delete_conversation",
       "path": "src/main.py",
       "line": 797,
-      "handler_fingerprint": "323a067df29dde5671a126521de7408d78d6e2471a977bb51f0085adccbd5440",
+      "handler_fingerprint": "9f3fc2d7846078ede97c718760b0bc0611b36d5d042ab5808605af27b375f579",
       "caught_types": ["Exception"],
       "status": "active",
       "boundary": "Conversation-soft-delete HTTP response after authenticated principal resolution",
@@ -2132,9 +2132,10 @@
         "tests/test_cosmos_failure_boundaries.py::test_real_conversation_http_mutation_outcome[forbidden-delete]",
         "tests/test_cosmos_failure_boundaries.py::test_real_conversation_http_mutation_outcome[unexpected-delete]",
         "tests/test_cosmos_failure_boundaries.py::test_real_conversation_http_mutation_outcome[cancelled-delete]",
-        "tests/test_cosmos_failure_boundaries.py::test_real_conversation_http_mutation_outcome[success-delete]"
+        "tests/test_cosmos_failure_boundaries.py::test_real_conversation_http_mutation_outcome[success-delete]",
+        "tests/test_http_boundary_dispositions.py::test_deletion_logs_no_user_controlled_identifiers"
       ],
-      "review": "Initial administrative adoption authorized by maintainer: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. Exact existing exception only; not independent review, additional allowances, or approval of broader identity, durability or runtime behavior.",
+      "review": "Initial administrative adoption authorized by maintainer: https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634. On 2026-10-30 the maintainer explicitly authorized this exact fingerprint refresh for the constant success-log security fix in https://github.com/Azure/agent-app-orchestrator/pull/422 and https://github.com/Azure/agent-app-orchestrator/pull/423. Caught types, failure translation, authorization and cancellation behavior are unchanged. Exact existing exception only; not independent review, additional allowances, or approval of broader identity, durability or runtime behavior.",
       "review_by_stage": "before-quality-gate-activation"
     },
     {

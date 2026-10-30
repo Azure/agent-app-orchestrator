@@ -814,7 +814,7 @@ async def delete_conversation(
         if deleted_doc is None:
             raise HTTPException(status_code=500, detail="Failed to delete conversation")
 
-        logging.info("[DeleteConversation] User %s deleted conversation %s", principal_id, conversation_id)
+        logging.info("[DeleteConversation] Conversation deleted successfully")
         return {"status": "success", "message": "Conversation deleted successfully"}
     except HTTPException:
         raise
