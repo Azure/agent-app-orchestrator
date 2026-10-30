@@ -59,4 +59,6 @@ implicit dictionaries or duplicated configuration knowledge.
 - Read API behavior from FastAPI routes and Pydantic schemas.
 - Read audit semantics from `contracts/` and their tests.
 - Read release state from `VERSION` and `CHANGELOG.md`.
-- Read user-facing product documentation from the `Azure/agent-landing-zone` docs branch.
+- Read product, operator, and developer guides from
+  [`Azure/AI-Landing-Zones` on `main`](https://github.com/Azure/AI-Landing-Zones/tree/main/docs/agent-landing-zone).
+  Keep local READMEs concise and retain engineering guidance and contracts here.

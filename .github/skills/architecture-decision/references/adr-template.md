@@ -62,7 +62,8 @@ fitness functions.]
 
 ## Documentation impact
 
-[README and pages on the `Azure/agent-landing-zone` docs branch that must change.]
+[Concise README links and affected product pages in `Azure/AI-Landing-Zones`
+on `main`, under `docs/agent-landing-zone/`. Keep this ADR local.]
 
 ## Review trigger
 

@@ -64,18 +64,21 @@ are in `.github/instructions/release.instructions.md`. Load the
 
 ## Documentation consistency
 
-User-facing documentation lives on the `docs` branch of `Azure/agent-landing-zone` and
-is published at https://azure.github.io/AI-Landing-Zones/agent-landing-zone/.
+Product, operator, and developer guides live only in
+[`Azure/AI-Landing-Zones` on `main`](https://github.com/Azure/AI-Landing-Zones/tree/main/docs/agent-landing-zone)
+and are published at https://azure.github.io/AI-Landing-Zones/agent-landing-zone/.
+Keep engineering instructions, governance policies, ADRs, and executable
+contracts local.
 
 When behavior, a configuration key, a default, deployment, operation, or user
 experience changes:
 
-- update every affected published page in the same coordinated change;
-- search documentation for both the new and previous names;
-- register new pages in `mkdocs.yml`;
+- update every affected published page in the same coordinated change.
+- search documentation for both the new and previous names.
+- register new pages in the central repository's `mkdocs.yml`.
 - keep this service README focused and link to the published site instead of
-  duplicating long-lived product guidance;
-- report the documentation branch or pull request in the implementation
+  duplicating long-lived product guidance.
+- report the central documentation commit or pull request in the implementation
   handoff.
 
 Load `documentation-consistency` for these changes.

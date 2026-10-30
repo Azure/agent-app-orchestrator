@@ -42,8 +42,11 @@ Configuration is loaded with service-specific and shared labels, and secrets
 are resolved through Key Vault references.
 
 This component participates in a multi-repository solution. User-facing
-product documentation lives on the `docs` branch of `Azure/agent-landing-zone` and is
-published at https://azure.github.io/AI-Landing-Zones/agent-landing-zone/.
+product documentation lives only in
+[`Azure/AI-Landing-Zones` on `main`](https://github.com/Azure/AI-Landing-Zones/tree/main/docs/agent-landing-zone)
+and is published at https://azure.github.io/AI-Landing-Zones/agent-landing-zone/.
+Keep product, operator, and developer guides central. Local engineering
+instructions, governance policies, ADRs, and executable contracts remain here.
 
 ## Repository boundaries
 
@@ -492,8 +495,9 @@ This component remains compatible by contract with UI `v2.6.2` and ingestion
 `v2.7.3`; no wire/audit/auth/configuration migration is introduced. Live Azure
 compatibility and recovery are separate, unperformed acceptance steps.
 Recovery is the preceding orchestrator artifact (shipped `v4.1.1`), without
-data migration or peer changes. Coordination is Azure/agent-landing-zone#689; published
-contributor documentation is being coordinated in Azure/agent-landing-zone#688 on `docs`.
+data migration or peer changes. Coordination is Azure/agent-landing-zone#689.
+Published contributor guidance is maintained in `Azure/AI-Landing-Zones` on
+`main`. See [orchestrator testing](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/application-testing/#orchestrator).
 
 - Discover existing commands from `pyproject.toml`, package manifests, and
   workflows; do not invent validation commands.
