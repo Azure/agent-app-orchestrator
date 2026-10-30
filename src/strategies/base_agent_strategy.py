@@ -355,6 +355,7 @@ class BaseAgentStrategy(ABC):
         try:
             env = Environment(
                 loader=FileSystemLoader(prompt_dir),
+                autoescape=True,
                 undefined=StrictUndefined,  # Raises error if undefined variable is used
                 trim_blocks=True,           # Remove first newline after template tag
                 lstrip_blocks=True          # Strip leading spaces/tabs from block tags
