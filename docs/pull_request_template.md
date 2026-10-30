@@ -6,7 +6,7 @@
 
 ## Contributing guidelines
 
-Please see [Contributing Guidelines](../CONTRIBUTING.md) before creating your Pull Request.
+Please see [Contributing Guidelines](https://github.com/Azure/agent-landing-zone/blob/main/CONTRIBUTING.md) before creating your Pull Request.
 
 ## Type of change
 
@@ -41,16 +41,18 @@ If this change depends on pull requests in other repositories within the solutio
 
 ## Does this require changes to project documentation?
 
-If the changes add new functionality, update the documentation accordingly.
+Update affected product, operator, and developer guides in
+[Azure/AI-Landing-Zones on `main`](https://github.com/Azure/AI-Landing-Zones/tree/main/docs/agent-landing-zone).
+Keep engineering instructions, policies, ADRs, and executable contracts local.
 
 - [ ] Yes
 - [ ] No
 
 ## Documentation Link
 
-If this change adds a new functionality, provide a link to its documentation.
+Provide the published topic link and central documentation commit or pull request.
 
-<!-- Example: https://github.com/Azure/agent-app-orchestrator/wiki/New-Feature-Guide -->
+<!-- Example: https://azure.github.io/AI-Landing-Zones/agent-landing-zone/application-api/ -->
 
 ## Code quality checklist
 

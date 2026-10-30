@@ -21,82 +21,28 @@ configured strategy, streams answers, and integrates models, retrieval, and
 tools. Classic execution uses FastAPI and Cosmos DB conversation storage.
 The separate Microsoft Foundry hosted entrypoint is stateless.
 
-## Documentation and release scope
+## Documentation
 
-- [Product documentation](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/)
-  covers architecture, deployment, and cross-component setup.
-- [Canonical documentation source](https://github.com/Azure/AI-Landing-Zones/tree/main/docs/agent-landing-zone)
-  is on `Azure/AI-Landing-Zones` `main`, not a legacy documentation branch.
-- [Service configuration, API, identity, and operations](docs/runtime.md)
-  describes this component's implementation and limitations.
-- [Audit schemas and integrity pins](contracts/) define the shared event shapes.
+Product, operator, and developer guides are maintained only in
+[Azure/AI-Landing-Zones on `main`](https://github.com/Azure/AI-Landing-Zones/tree/main/docs/agent-landing-zone).
 
-Agent Landing Zone `4.3.0` pins orchestrator
-[`v5.2.1`](https://github.com/Azure/agent-app-orchestrator/tree/v5.2.1)
-at `27f952fcf8d48a2ba6267c237ea6bea8361fedd2`. These runtime notes describe
-that revision. Do not treat unreleased `develop` behavior as shipped.
+- [Application overview](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/application/)
+- [Hosted agents](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/hosted-agents/)
+- [Agent strategies](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/agent-strategies/)
+- [Local orchestrator development](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/local-development/#orchestrator)
+- [Application APIs](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/application-api/)
+- [Monitoring and audit](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/application-monitoring/)
 
-## Run this service locally
+## Contributing and support
 
-First provision or obtain compatible infrastructure through Agent Landing Zone.
-This repository does not provision a standalone resource set. Use a development
-App Configuration store, appropriate Azure RBAC, and network access to its
-dependencies. A successful server start is not an end-to-end readiness test.
-
-From this repository's root, with Python 3.12 and Azure CLI installed, run:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python -m pip install -r requirements.txt
-az login
-$env:APP_CONFIG_ENDPOINT = "https://<app-configuration-name>.azconfig.io"
-.\.venv\Scripts\python -m uvicorn main:app --app-dir src --host 127.0.0.1 --port 9000
-```
-
-Use actual configured resource and model values, not the placeholders in
-[`.env.sample`](.env.sample). The service does not automatically load that file.
-The [runtime guide](docs/runtime.md#configuration-and-identity) explains required
-settings and the explicit environment-variable opt-in. SQL strategies also
-need the ODBC dependencies installed by the [Dockerfile](Dockerfile).
-
-Classic requests use `POST /orchestrator`. User bearer authentication and
-service authentication are separate requirements. See the
-[API and security boundaries](docs/runtime.md#classic-api-and-conversation-state)
-before calling it. The image's default command serves classic mode on port
-`8080`. Hosted execution requires a different command and the Foundry platform
-prerequisites described in the [hosted section](docs/runtime.md#hosted-execution).
-
-## Retrieval and optional ingestion
-
-`RETRIEVAL_BACKEND` defaults to `ai_search` in this service. Platform deployment
-defaults can supply a different value. Foundry IQ uses separately configured
-knowledge sources. Deploying the optional ingestion Container App does not
-change this backend or select sources.
-
-Fresh supported native Foundry IQ deployments default the ingestion Container
-App deployment control to `false`, independently of Container Apps or hosted
-orchestration. Existing and custom selections are preserved. Native Blob
-ingestion is not a replacement for conversation attachments or every source
-type. See [retrieval boundaries](docs/runtime.md#retrieval-and-ingestion-boundaries)
-before choosing a topology.
-
-## Contributing
-
-### Adopting the security maintenance update
-
-The security update on the source branches enables Jinja autoescaping for
-prompt context substitutions and reusable agent instructions. Literal template
-markup is unchanged, but substituted `<`, `>`, `&` and quotes are entity-encoded.
-Missing variables still fail rendering. Review custom prompt expectations for
-these values before adopting the update. HTML escaping is not a prompt-injection
-defense or a replacement for the existing authorization and retrieval controls.
-Merging this source update does not deploy or update a running agent.
-
-Updating `develop` does not deploy to Azure. Dev deployment is opt-in through
-the **Manual Dev Deployment** workflow in GitHub Actions; run it explicitly
-against the intended branch only when a deployment is authorized.
-
-Use the repository's [engineering contract](AGENTS.md) and
+Use the local [engineering contract](AGENTS.md),
+[executable contracts](contracts/), and
 [contribution guidelines](https://github.com/Azure/agent-landing-zone/blob/main/CONTRIBUTING.md).
-The [deprecated evaluations folder](evaluations/README.md) links to external
-evaluation guidance. No evaluation gate is enabled merely by following that link.
+For help, see [support](https://github.com/Azure/agent-landing-zone/blob/main/SUPPORT.md).
+Report vulnerabilities through the [security policy](SECURITY.md).
+
+## Legal
+
+This project is licensed under the [MIT License](LICENSE.md).
+Use of Microsoft trademarks is subject to
+[Microsoft's trademark guidelines](https://www.microsoft.com/legal/intellectualproperty/trademarks/).
