@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 from typing import Any, Dict, List, Optional, Annotated
@@ -36,10 +37,20 @@ from connectors.types import (
 from dependencies import get_config
 
 class NL2SQLPlugin:
-    def __init__(self):
-        self.cosmos = get_cosmosdb_client()
-        self.search = get_search_client()
-        cfg = get_config()
+    def __init__(self, *, config=None, source_registry=None, search=None, model=None,
+                 query_timeout_seconds=None, max_rows=None):
+        # Native applications supply capability-owned clients. Existing consumers
+        # retain their constructor contract; no runtime-global Cosmos is needed.
+        self.cosmos = source_registry if source_registry is not None else get_cosmosdb_client()
+        self.search = search if search is not None else get_search_client()
+        self.model = model
+        self.query_timeout_seconds = query_timeout_seconds
+        self.max_rows = max_rows
+        if query_timeout_seconds is not None and not 1 <= query_timeout_seconds <= 300:
+            raise ValueError("NL2SQL query timeout must be between 1 and 300 seconds.")
+        if max_rows is not None and not 1 <= max_rows <= 10000:
+            raise ValueError("NL2SQL row limit must be between 1 and 10000.")
+        cfg = config if config is not None else get_config()
         self.container_name = cfg.get("DATASOURCES_CONTAINER", "datasources")
         self.tables_index = cfg.get("SEARCH_TABLES_INDEX_NAME", "nl2sql-tables")
         self.measures_index = cfg.get("SEARCH_MEASURES_INDEX_NAME", "nl2sql-measures")
@@ -167,7 +178,7 @@ class NL2SQLPlugin:
         use_semantic = self.use_semantic
         sem_cfg = self.semantic_config
 
-        aoai = get_genai_client()
+        aoai = self.model if self.model is not None else get_genai_client()
         logging.info("[tables] generating embeddings")
         embeddings = await aoai.get_embeddings(input)
 
@@ -258,7 +269,7 @@ class NL2SQLPlugin:
         use_sem = self.use_semantic
         sem_cfg = self.semantic_config
 
-        aoai = get_genai_client()
+        aoai = self.model if self.model is not None else get_genai_client()
         logging.info("[queries] generating embeddings")
         embeddings = await aoai.get_embeddings(input)
 
@@ -387,6 +398,9 @@ class NL2SQLPlugin:
                 logging.error(f"Unsupported datasource type: {datasource_type}")
                 return ExecuteQueryResult(error="Datasource type not supported for SQL queries.")
 
+            if self.query_timeout_seconds is not None or self.max_rows is not None:
+                return await self._execute_bounded_sql(sql_client, query)
+
             logging.info("Creating SQL connection")
             connection = await sql_client.create_connection()
             cursor = connection.cursor()
@@ -396,6 +410,8 @@ class NL2SQLPlugin:
             logging.info("Fetching query results")
             columns = [column[0] for column in cursor.description]
             rows = cursor.fetchall()
+            if self.max_rows is not None and len(rows) > self.max_rows:
+                return ExecuteQueryResult(error="Query exceeded the configured row limit.")
             logging.info(f"Query returned {len(rows)} rows")
 
             results = [dict(zip(columns, row)) for row in rows]
@@ -418,3 +434,49 @@ class NL2SQLPlugin:
                             resource_name,
                             type(cleanup_error).__name__,
                         )
+
+    async def _execute_bounded_sql(self, client: Any, query: str) -> ExecuteQueryResult:
+        async def operation() -> ExecuteQueryResult:
+            connection = await client.create_connection()
+            # One thread owns execute, fetch and cleanup. Cancellation must never
+            # close an ODBC handle while that same handle is executing elsewhere.
+            return await asyncio.to_thread(self._bounded_query, connection, query)
+
+        task = asyncio.create_task(operation())
+        cancellation = None
+        while True:
+            try:
+                result = await asyncio.shield(task)
+                break
+            except asyncio.CancelledError as cancelled:
+                if task.cancelled():
+                    raise
+                cancellation = cancelled
+            except Exception as error:
+                if cancellation is None:
+                    raise
+                logging.warning("Cancelled SQL operation failed (%s)", type(error).__name__)
+                raise cancellation from None
+        if cancellation is not None:
+            raise cancellation
+        return result
+
+    def _bounded_query(self, connection: Any, query: str) -> ExecuteQueryResult:
+        cursor = None
+        try:
+            if self.query_timeout_seconds is not None:
+                connection.timeout = self.query_timeout_seconds
+            cursor = connection.cursor()
+            cursor.execute(query)
+            columns = [column[0] for column in cursor.description]
+            rows = cursor.fetchmany(self.max_rows + 1) if self.max_rows is not None else cursor.fetchall()
+            if self.max_rows is not None and len(rows) > self.max_rows:
+                return ExecuteQueryResult(error="Query exceeded the configured row limit.")
+            return ExecuteQueryResult(results=[dict(zip(columns, row)) for row in rows])
+        finally:
+            for resource_name, resource in (("cursor", cursor), ("connection", connection)):
+                if resource is not None:
+                    try:
+                        resource.close()
+                    except Exception as cleanup_error:
+                        logging.warning("SQL %s cleanup failed (%s)", resource_name, type(cleanup_error).__name__)

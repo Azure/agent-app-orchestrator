@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Native execution and explicit hosts.** Replace the classic service and
+  stateless adapter with MAF Agent conversations and a named human-reviewed graph,
+  using official Responses hosting or the standalone Durable Extension with DTS.
+  Separate host dependency groups/images and capture scoped functional run settings.
+- **Optional NL2SQL and retrieval tools.** Reuse the datasource catalog,
+  read-only query validator and SQL/Fabric adapters without runtime-global Cosmos.
+  Expose retrieval/MCP as capabilities, with bounded SQL execution and typed errors.
+
+### Removed
+
+- **Mixed strategies and classic runtime APIs.** Retire AGENT_STRATEGY,
+  /orchestrator, /conversations and /api/dashboard execution. Adoption requires a
+  coordinated component major; rollback retains the prior deployment and its data.
+  No conversation/checkpoint migration or runtime provisioning is introduced.
+
 ## [v5.3.1] - 2026-10-30
 
 ### Changed

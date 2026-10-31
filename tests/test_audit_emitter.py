@@ -683,12 +683,12 @@ def test_source_excerpt_is_captured_only_when_explicitly_allowlisted():
 
 @pytest.mark.asyncio
 async def test_public_maf_function_proxy_preserves_contract_and_audits_call():
-    from agent_framework import AIFunction
+    from agent_framework import FunctionTool
 
     async def echo(value: str) -> str:
         return value
 
-    original = AIFunction(name="echo", description="Echo", func=echo)
+    original = FunctionTool(name="echo", description="Echo", func=echo)
     wrapped = wrap_ai_functions([original], tool_kind="mcp")
     emitter = enabled_emitter()
     AuditEmitter._default = emitter
@@ -696,7 +696,7 @@ async def test_public_maf_function_proxy_preserves_contract_and_audits_call():
     context.request_started_event_id = "evt_" + ("1" * 32)
     try:
         with capture_audit_logs() as capture:
-            result = await wrapped[0].invoke(value="hello")
+            result = await wrapped[0].invoke(arguments={"value": "hello"}, skip_parsing=True)
     finally:
         end_audit_request(token)
 

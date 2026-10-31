@@ -2,7 +2,6 @@ import pytest
 
 from plugins.nl2sql.plugin import NL2SQLPlugin
 from plugins.nl2sql.sql_validation import validate_single_read_only_select
-from strategies.nl2sql_strategy import NL2SQLStrategy
 
 
 @pytest.mark.parametrize(
@@ -109,11 +108,8 @@ async def test_execute_sql_query_rejects_unsafe_query_before_datasource_access()
     assert result.error == "Only one SQL statement is allowed."
 
 
-def test_extract_sql_query_preserves_stacked_statement_for_validation():
-    strategy = NL2SQLStrategy.__new__(NL2SQLStrategy)
-
-    query = strategy._extract_sql_query(
-        "Generated SQL:\nSELECT 1;\n/* hidden write */\nDROP TABLE dbo.Orders;"
-    )
-
-    assert query == "SELECT 1;\n/* hidden write */\nDROP TABLE dbo.Orders"
+def test_native_query_tool_never_strips_stacked_statements():
+    # Native tools accept the complete model argument, without the retired
+    # strategy's SQL text extractor between generation and validation.
+    query = "SELECT 1;\n/* hidden write */\nDROP TABLE dbo.Orders;"
+    assert not validate_single_read_only_select(query).is_valid

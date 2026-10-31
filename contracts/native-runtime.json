@@ -1,0 +1,136 @@
+{
+  "contract_version": 1,
+  "agent_name": "alz-conversation",
+  "workflow_name": "alz-research-review",
+  "executor_ids": ["research", "human-review", "complete"],
+  "business_types": {
+    "start": "native.contracts.ResearchReviewStart",
+    "review_request": "native.contracts.ReviewRequest",
+    "reply": "native.contracts.ReviewDecision",
+    "result": "native.contracts.ResearchReviewResult",
+    "topic_max_length": 8000,
+    "review_comment_max_length": 4000,
+    "review_decisions": ["approve", "reject"],
+    "result_statuses": ["approved", "rejected"],
+    "result_fields": ["status", "topic", "draft", "review_comment", "configuration_revision"],
+    "caller_identity_fields": false
+  },
+  "application_mode": {"values": ["conversational", "workflow", "both"], "default": "conversational"},
+  "orchestration_host": {"values": ["hosted", "container_apps"], "required": true},
+  "hosted": {
+    "entrypoint": "python -m native.hosted",
+    "docker_target": "hosted",
+    "history_source": "agent_server",
+    "one_mode_per_publication": true,
+    "shared_appconfig_both_override": "APPLICATION_MODE=both may be deliberately overridden by a conversational/workflow Hosted publication environment",
+    "routes": {
+      "create": "POST /responses",
+      "get": "GET /responses/{response_id}",
+      "delete": "DELETE /responses/{response_id}",
+      "cancel": "POST /responses/{response_id}/cancel",
+      "input_items": "GET /responses/{response_id}/input_items",
+      "readiness": "GET /readiness"
+    },
+    "checkpoint_application_type_allowlist": [
+      "native.contracts:ResearchReviewStart", "native.contracts:ReviewRequest",
+      "native.contracts:ReviewDecision", "native.contracts:ResearchReviewResult"
+    ],
+    "workflow_start": {"input": "{\"topic\":\"Synthetic research question\"}", "store": true},
+    "workflow_pending": {
+      "type": "function_call", "name": "request_info",
+      "arguments": {"request_id": "<native wire alias>", "request": "<ReviewRequest object>"},
+      "call_id": "<native wire alias>"
+    },
+    "workflow_reply": {
+      "previous_response_id": "<native prior response ID>", "store": true,
+      "input": [{
+        "type": "function_call_output", "call_id": "<native wire alias>",
+        "output": "{\"decision\":\"approve\",\"comment\":\"Reviewed\"}"
+      }]
+    },
+    "workflow_result_item": {"type": "structured_outputs", "output": "<ResearchReviewResult object>"},
+    "inflight_crash_recovery": "Not enabled by default; persisted human waits do not prove inflight crash recovery"
+  },
+  "container_apps": {
+    "entrypoint": "python -m native.durable",
+    "docker_target": "container_apps",
+    "public_worker_http": false,
+    "workflow_client": "agent_framework_durabletask.DurableWorkflowClient",
+    "agent_client": "agent_framework_durabletask.DurableAIAgentClient",
+    "agent_entity_version": 2,
+    "agent_methods": [
+      "DurableAIAgentClient(client, entity_version=2).get_agent(agent_name)",
+      "agent.create_session(session_id=None)",
+      "agent.run(messages, session=session, options=None, stream=False)"
+    ],
+    "agent_session_persistence": "Use the native DurableAgentSession.to_dict() handle, preserving durable_session_id and durable_entity_version",
+    "workflow_start": {"topic": "Synthetic research question"},
+    "workflow_reply": {"decision": "reject", "comment": "Needs revision"},
+    "workflow_output": "Typically a list of typed ResearchReviewResult yielded outputs; clients decoding application types need the matching native.contracts module",
+    "workflow_methods": [
+      "start_workflow(input, workflow_name, instance_id)",
+      "get_pending_hitl_requests(instance_id, workflow_name)",
+      "send_hitl_response(instance_id, request_id, response, workflow_name)",
+      "await_workflow_output(instance_id, workflow_name, timeout_seconds)"
+    ],
+    "scheduler_binding": "Endpoint=<provisioned HTTPS endpoint>;TaskHub=<provisioned task hub>;Authentication=ManagedIdentity"
+  },
+  "tools": {
+    "enable_flags": ["SEARCH_RETRIEVAL_ENABLED", "FOUNDRY_IQ_ENABLED", "MCP_ENABLED", "NL2SQL_ENABLED", "MULTIMODAL_ENABLED"],
+    "default_enabled": false,
+    "nl2sql_source_registry": "cosmos",
+    "nl2sql_catalog_container": {"key": "DATASOURCES_CONTAINER", "default": "datasources"},
+    "nl2sql_metadata_indexes": {
+      "SEARCH_TABLES_INDEX_NAME": "nl2sql-tables", "SEARCH_MEASURES_INDEX_NAME": "nl2sql-measures",
+      "SEARCH_QUERIES_INDEX_NAME": "nl2sql-queries"
+    },
+    "nl2sql_functions": [
+      "get_all_datasources_info", "get_all_tables_info", "get_schema_info", "tables_retrieval",
+      "measures_retrieval", "queries_retrieval", "validate_sql_query", "execute_sql_query", "execute_dax_query"
+    ],
+    "nl2sql_metadata_fields": {
+      "common": ["id", "description", "type"],
+      "sql_database": ["server", "database"],
+      "sql_database_optional": ["uid"],
+      "sql_endpoint": ["server", "database", "tenant_id", "client_id"],
+      "semantic_model": ["organization", "workspace", "dataset", "tenant_id", "client_id"]
+    },
+    "nl2sql_query_timeout_seconds": 30,
+    "nl2sql_max_rows": 1000,
+    "dax_requires_invocation_local_delegation": true,
+    "multimodal_function": "multimodal_retrieve",
+    "iq_tool_name": "foundry-iq",
+    "native_host_delegated_dax_multimodal_tokens": false,
+    "sql_provisioning_or_grants": false,
+    "mcp_transport_default": "streamable_http",
+    "mcp_timeout_seconds": 30
+  },
+  "configuration": {
+    "canonical_python_package": "native",
+    "source_checkout_pythonpath": "src",
+    "src_native_alias_supported": false,
+    "native_tool_secret_names_consumed": false,
+    "label": "agent-lz",
+    "refresh_interval_seconds": 30,
+    "structural_changes_require_redeployment": true,
+    "functional_snapshot": "Native executor state captured before research; no credential values",
+    "secrets": "Only selected enabled consumers; never checkpointed"
+  },
+  "retired_routes": ["/orchestrator", "/conversations", "/api/dashboard"],
+  "runtime_admin_or_ingestion_api": false,
+  "audit": {
+    "default_enabled": false,
+    "flag": "AUDIT_EVENTS_ENABLED",
+    "hmac_key": "AUDIT_HMAC_KEY",
+    "hmac_key_only_when_enabled": true,
+    "native_in_process_tool_and_datasource_events": true,
+    "classic_full_request_and_remote_source_pipeline": false
+  },
+  "validation_boundaries": {
+    "local_sdk_unit_contract_required": true,
+    "private_live_deferred": true,
+    "azure_smoke_supplemental": true,
+    "ui_attachment_and_ingestion_limits": "Owned by UI/ingestion; not certified by this runtime"
+  },
+  "migration_engine": false
+}

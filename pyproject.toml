@@ -4,63 +4,27 @@ version = "0.1.0"
 description = "Agent Landing Zone Orchestrator"
 requires-python = ">=3.12"
 dependencies = [
-    # Agent framework
-    "agent-framework-azure-ai==1.0.0rc6",
-    "agent-framework-azure-ai-search==1.0.0b260116",
-    "agent-framework-core==1.0.0b260116",
-    
-    # Azure SDKs
-    "azure-ai-agents>=1.2.0b5",
-    "azure-ai-agentserver-responses==2.0.0b1",
-    "azure-ai-projects==2.0.0b3",
-    "azure-appconfiguration>=1.7.1",
-    "azure-appconfiguration-provider>=2.3.1",
-    "azure-cosmos>=4.5.1",
-    "azure-identity>=1.21.0",
-    "azure-keyvault-secrets>=4.8.0",
-    "azure-monitor-opentelemetry>=1.8.9",
-    "azure-search-documents>=11.7.0b2",
-    "azure-storage-blob>=12.25.1",
-    
-    # Web framework
-    "fastapi>=0.115.12",
-    "uvicorn>=0.34.1",
-    "python-multipart>=0.0.21",
-    "sse-starlette>=3.0.3",
-    
-    # HTTP clients
-    "aiohttp>=3.14.4",
-    "httpx>=0.28.1",
-    "httpx-sse>=0.4.3",
-    
-    # OpenTelemetry
-    "opentelemetry-api>=1.43.0",
-    "opentelemetry-sdk>=1.43.0",
-    "opentelemetry-instrumentation-fastapi>=0.64b0",
-    "opentelemetry-instrumentation-httpx>=0.64b0",
-    
-    # AI/ML
-    "openai==3.24.0",
-    "tiktoken>=0.7.0",
-    
-    # Data validation
-    "pydantic>=2.11.4",
-    "pydantic-settings>=2.12.0",
-    
-    # Database
-    "pyodbc>=5.3.0",
-    
-    # Utilities
-    "jinja2>=3.1.6",
-    "python-dotenv>=1.1.0",
-    "tenacity>=9.1.2",
-    "pyyaml>=6.0.3",
-    
-    # MCP
-    "mcp>=1.25.0",
+    "agent-framework-core==1.24.0",
+    "agent-framework-foundry==1.16.0",
+    "azure-identity==1.25.3",
+    "azure-appconfiguration-provider==2.3.1",
+    "azure-monitor-opentelemetry==1.8.11",
 ]
 
 [project.optional-dependencies]
+hosted = ["agent-framework-foundry-hosting==1.0.0b261030"]
+container-apps = [
+    "agent-framework-durabletask==1.0.0b261029",
+    "durabletask==1.12.0", "durabletask-azuremanaged==1.12.0",
+]
+tools = [
+    "azure-cosmos==4.5.1", "azure-keyvault-secrets==4.11.2",
+    "azure-search-documents==11.7.0b2", "azure-storage-blob==12.25.1",
+    "fastapi==0.135.4", "PyJWT==2.15.0",
+    "sqlparse==0.6.0", "pyodbc==5.3.0", "tiktoken==0.14.0",
+    "requests==2.34.2", "jinja2==3.1.6", "tenacity==9.1.4",
+    "mcp==2.3.0", "httpx2==2.16.0",
+]
 test = [
     "jsonschema>=4.23.0",
     "pytest>=8.0.0",
@@ -71,6 +35,13 @@ test = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["src"]
+sources = ["src"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"VERSION" = "native/VERSION"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -1,0 +1,228 @@
+"""Scoped App Configuration loading, official refresh and immutable run settings."""
+
+import asyncio
+import hashlib
+import json
+import os
+import threading
+from collections.abc import Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any, Iterator, Literal
+from urllib.parse import urlsplit
+
+from pydantic import BaseModel, ConfigDict
+
+LABEL = "agent-lz"
+BASE_KEYS = (
+    "ORCHESTRATION_HOST", "APPLICATION_MODE", "AI_FOUNDRY_PROJECT_ENDPOINT",
+    "CHAT_DEPLOYMENT_NAME", "CHAT_TEMPERATURE", "CHAT_OUTPUT_TOKENS",
+    "SEARCH_RETRIEVAL_ENABLED", "FOUNDRY_IQ_ENABLED", "MCP_ENABLED",
+    "NL2SQL_ENABLED", "MULTIMODAL_ENABLED",
+    "AUDIT_EVENTS_ENABLED", "LOG_LEVEL", "APPLICATIONINSIGHTS_CONNECTION_STRING",
+    "AZURE_LOG_LEVEL", "AZURE_HTTP_LOG_LEVEL", "AZURE_MONITOR_DISABLE_LOGGING",
+    "RETRIEVAL_AUTH_MODE", "ALLOW_ANONYMOUS",
+)
+TOOL_KEYS = {
+    "NL2SQL_ENABLED": (
+        "NL2SQL_SOURCE_REGISTRY", "DATABASE_ACCOUNT_NAME", "DATABASE_NAME",
+        "DATASOURCES_CONTAINER", "SEARCH_SERVICE_QUERY_ENDPOINT", "SEARCH_SERVICE_NAME",
+        "SEARCH_API_VERSION", "SEARCH_TABLES_INDEX_NAME", "SEARCH_MEASURES_INDEX_NAME",
+        "SEARCH_QUERIES_INDEX_NAME", "SEARCH_TABLES_INDEX_TOP_K", "SEARCH_QUERIES_INDEX_TOP_K",
+        "SEARCH_APPROACH", "SEARCH_USE_SEMANTIC", "SEARCH_SEMANTIC_SEARCH_CONFIG",
+        "AI_FOUNDRY_ACCOUNT_ENDPOINT", "EMBEDDING_DEPLOYMENT_NAME", "OPENAI_API_VERSION",
+        "NL2SQL_QUERY_TIMEOUT_SECONDS", "NL2SQL_MAX_ROWS", "KEY_VAULT_URI",
+    ),
+    "SEARCH_RETRIEVAL_ENABLED": (
+        "SEARCH_CONNECTION_ID", "SEARCH_RAG_INDEX_NAME", "SEARCH_RAGINDEX_TOP_K",
+    ),
+    "FOUNDRY_IQ_ENABLED": ("KNOWLEDGE_BASE_CONNECTION_ID", "KNOWLEDGE_BASE_NAME"),
+    "MCP_ENABLED": (
+        "MCP_APP_ENDPOINT", "MCP_SERVER_TRANSPORT", "MCP_CLIENT_TIMEOUT",
+        "MCP_TRUSTED_HOSTS", "MCP_API_KEY",
+    ),
+    "MULTIMODAL_ENABLED": (
+        "SEARCH_SERVICE_QUERY_ENDPOINT", "SEARCH_SERVICE_NAME", "SEARCH_RAG_INDEX_NAME",
+        "SEARCH_RAGINDEX_TOP_K", "SEARCH_APPROACH", "SEARCH_API_VERSION",
+        "SEARCH_USE_SEMANTIC", "SEARCH_SEMANTIC_SEARCH_CONFIG",
+        "AI_FOUNDRY_ACCOUNT_ENDPOINT", "EMBEDDING_DEPLOYMENT_NAME", "OPENAI_API_VERSION",
+    ),
+    "AUDIT_EVENTS_ENABLED": (
+        "AUDIT_HMAC_KEY", "AUDIT_HMAC_KEY_ID", "AUDIT_SENSITIVE_CONTENT_ENABLED",
+        "AUDIT_SENSITIVE_CONTENT_FIELDS", "AUDIT_SOURCE_EVENT_LIMIT",
+        "AUDIT_ADDITIONAL_REDACTED_KEYS", "AUDIT_ACTOR_PSEUDONYM_ENABLED",
+    ),
+}
+# Secret values are never included in a workflow checkpoint/configuration digest.
+SECRET_KEYS = frozenset({"MCP_API_KEY", "AUDIT_HMAC_KEY"})
+AUTHORIZATION_KEYS = frozenset({"RETRIEVAL_AUTH_MODE", "ALLOW_ANONYMOUS"})
+_scoped_config: ContextVar["ConfigView | None"] = ContextVar("native_config", default=None)
+
+
+def enabled(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if str(value).strip().lower() not in ("true", "false"):
+        raise ValueError("Feature settings must be true or false.")
+    return str(value).strip().lower() == "true"
+
+
+def https_endpoint(value: str, key: str) -> str:
+    endpoint = urlsplit(value)
+    if (
+        endpoint.scheme != "https" or not endpoint.hostname
+        or endpoint.username or endpoint.password or endpoint.query or endpoint.fragment
+    ):
+        raise ValueError(f"{key} requires an HTTPS endpoint without credentials.")
+    return value
+
+
+class RuntimeSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    host: Literal["hosted", "container_apps"]
+    mode: Literal["conversational", "workflow", "both"] = "conversational"
+    project_endpoint: str
+    model: str
+
+    @classmethod
+    def read(cls, values: Mapping[str, Any], env: Mapping[str, str] | None = None) -> "RuntimeSettings":
+        env = os.environ if env is None else env
+        structural: dict[str, Any] = {}
+        for key in ("ORCHESTRATION_HOST", "APPLICATION_MODE"):
+            configured, deployment = values.get(key), env.get(key)
+            hosted_publication_override = (
+                key == "APPLICATION_MODE" and configured == "both"
+                and deployment in ("conversational", "workflow")
+                and structural.get("ORCHESTRATION_HOST") == "hosted"
+            )
+            if configured and deployment and configured != deployment and not hosted_publication_override:
+                raise ValueError(f"Contradictory {key}; update the publication configuration.")
+            structural[key] = deployment or configured
+        result = cls(
+            host=structural["ORCHESTRATION_HOST"],
+            mode=structural["APPLICATION_MODE"] or "conversational",
+            project_endpoint=https_endpoint(
+                str(values.get("AI_FOUNDRY_PROJECT_ENDPOINT") or ""), "AI_FOUNDRY_PROJECT_ENDPOINT"
+            ),
+            model=str(values.get("CHAT_DEPLOYMENT_NAME") or ""),
+        )
+        if not result.model:
+            raise ValueError("CHAT_DEPLOYMENT_NAME is required.")
+        if result.host == "hosted" and result.mode == "both":
+            raise ValueError("Hosted requires one application mode per publication.")
+        return result
+
+
+class FunctionalSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    revision: str
+    values: dict[str, Any]
+
+    @classmethod
+    def capture(cls, values: Mapping[str, Any]) -> "FunctionalSnapshot":
+        safe = {
+            key: value for key, value in values.items()
+            if key not in SECRET_KEYS | AUTHORIZATION_KEYS
+            and key not in ("ORCHESTRATION_HOST", "APPLICATION_MODE")
+        }
+        payload = json.dumps(safe, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        return cls(revision=hashlib.sha256(payload.encode()).hexdigest(), values=json.loads(payload))
+
+
+class ConfigView:
+    """The existing connector getter shape without constructing the classic provider."""
+
+    def __init__(self, values: Mapping[str, Any], credential: Any = None, aiocredential: Any = None):
+        self.values = dict(values)
+        self.credential = credential
+        self.aiocredential = aiocredential
+
+    def get(self, key: str, default: Any = None, type: Any = str) -> Any:
+        value = self.values.get(key, default)
+        if value is None or type is None:
+            return value
+        return enabled(value) if type is bool else type(value)
+
+    def get_value(self, key: str, default: Any = None, allow_none: bool = False, type: Any = str) -> Any:
+        value = self.get(key, default, type)
+        if value is None and not allow_none:
+            raise ValueError(f"Missing required configuration: {key}")
+        return value
+
+
+def current_config() -> ConfigView | None:
+    return _scoped_config.get()
+
+
+@contextmanager
+def config_scope(config: ConfigView) -> Iterator[None]:
+    token = _scoped_config.set(config)
+    try:
+        yield
+    finally:
+        _scoped_config.reset(token)
+
+
+class NativeConfig:
+    """No wildcard selectors, legacy labels, global Cosmos, or eager KV secrets."""
+
+    def __init__(self, endpoint: str, credential: Any, sync_credential: Any, loader: Any = None):
+        self.endpoint = https_endpoint(endpoint, "APP_CONFIG_ENDPOINT")
+        self.credential = credential
+        self.sync_credential = sync_credential
+        self.loader = loader
+        self.providers: list[Any] = []
+        self.settings: RuntimeSettings | None = None
+        self._lock = threading.Lock()
+
+    async def _load(self, keys: tuple[str, ...], secrets: bool = False) -> Any:
+        from azure.appconfiguration.provider import AzureAppConfigurationKeyVaultOptions, SettingSelector, load
+
+        kwargs: dict[str, Any] = {
+            "endpoint": self.endpoint, "credential": self.credential,
+            "selects": [SettingSelector(key_filter=k, label_filter=LABEL) for k in keys],
+            "refresh_on": [(k, LABEL) for k in keys],
+            "refresh_interval": 30,
+        }
+        if secrets:
+            kwargs["key_vault_options"] = AzureAppConfigurationKeyVaultOptions(credential=self.credential)
+        # The synchronous provider is intentional: DTS workflow activities may
+        # execute on different event loops. Never share an aio transport between them.
+        def load_selected() -> Any:
+            return (self.loader or load)(**kwargs)
+        return await asyncio.to_thread(load_selected)
+
+    async def open(self) -> "NativeConfig":
+        self.providers.append(await self._load(BASE_KEYS))
+        values = dict(self.providers[0])
+        self.settings = RuntimeSettings.read(values)
+        for flag, keys in TOOL_KEYS.items():
+            if enabled(values.get(flag, False)):
+                self.providers.append(await self._load(keys, bool(SECRET_KEYS.intersection(keys))))
+        # Capability composition is structural; changing enabled flags needs a new publication.
+        self._flags = {flag: enabled(values.get(flag, False)) for flag in TOOL_KEYS}
+        return self
+
+    async def view(self, snapshot: FunctionalSnapshot | None = None) -> ConfigView:
+        return await asyncio.to_thread(self._view, snapshot)
+
+    def _view(self, snapshot: FunctionalSnapshot | None) -> ConfigView:
+        with self._lock:
+            for provider in self.providers:
+                provider.refresh()
+            values = {key: value for provider in self.providers for key, value in provider.items()}
+            if RuntimeSettings.read(values) != self.settings:
+                raise ValueError("Structural runtime configuration changed; redeploy.")
+            if any(enabled(values.get(k, False)) != v for k, v in self._flags.items()):
+                raise ValueError("Enabled capabilities changed; redeploy.")
+            if snapshot is not None:
+                # Secrets remain current and invocation-local; functional parameters stay with this run.
+                values = {
+                    **snapshot.values,
+                    **{k: v for k, v in values.items() if k in SECRET_KEYS | AUTHORIZATION_KEYS},
+                }
+            return ConfigView(values, self.sync_credential, self.credential)
+
+    async def close(self) -> None:
+        for provider in reversed(self.providers):
+            await asyncio.to_thread(provider.close)

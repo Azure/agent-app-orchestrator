@@ -254,6 +254,12 @@ class SearchClient:
             self._session = aiohttp.ClientSession()
         return self._session
 
+    async def close(self) -> None:
+        """Release a capability-owned HTTP session; the caller owns credentials."""
+        if self._session is not None:
+            await self._session.close()
+            self._session = None
+
     def set_request_context(
         self,
         *,

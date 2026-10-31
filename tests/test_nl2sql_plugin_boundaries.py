@@ -150,28 +150,9 @@ async def test_metadata_embedding_failure_still_propagates_before_search(plugin,
     plugin.search.search.assert_not_awaited()
 
 
-@pytest.fixture
-def maintained_strategy(plugin, patch_dependencies):
-    from strategies.nl2sql_strategy import NL2SQLStrategy
-
-    with patch("strategies.nl2sql_strategy.NL2SQLPlugin", return_value=plugin):
-        strategy = NL2SQLStrategy()
-    strategy.conversation = {"messages": []}
-    strategy._load_prompts = AsyncMock()
-    plugin.get_all_datasources_info = AsyncMock(return_value={"datasources": []})
-    plugin.tables_retrieval = AsyncMock(return_value={"tables": [{"table": "Orders"}]})
-    plugin.get_all_tables_info = AsyncMock(return_value={"tables": [{"table": "Orders"}]})
-    plugin.queries_retrieval = AsyncMock(return_value={"queries": []})
-    strategy._run_agent = AsyncMock(side_effect=[
-        '{"datasource_name":"source","datasource_type":"sql_database"}',
-        '{"sql_query":"SELECT 1"}',
-    ])
-    return strategy
-
-
 @pytest.mark.parametrize("outcome", ["missing", "provider", "malformed", "empty", "success", "cancelled"])
-async def test_real_schema_collector_distinguishes_unavailable_from_empty(
-    plugin, maintained_strategy, outcome,
+async def test_native_schema_tool_distinguishes_unavailable_from_empty(
+    plugin, outcome,
 ):
     failure = asyncio.CancelledError() if outcome == "cancelled" else RuntimeError("private schema")
     if outcome in {"provider", "cancelled"}:
@@ -185,43 +166,22 @@ async def test_real_schema_collector_distinguishes_unavailable_from_empty(
         }
     if outcome == "cancelled":
         with pytest.raises(asyncio.CancelledError) as raised:
-            await maintained_strategy._collect_schema_context("source", "question")
+            await plugin.get_schema_info("source", "Orders")
         assert raised.value is failure
         return
-    context = await maintained_strategy._collect_schema_context("source", "question")
+    schema = await plugin.get_schema_info("source", "Orders")
     unavailable = outcome in {"missing", "provider", "malformed"}
-    assert len(context["schemas"]) == (0 if unavailable else 1)
-    assert len(context["unavailable_schemas"]) == (1 if unavailable else 0)
     if unavailable:
-        schema = context["unavailable_schemas"][0]
         assert schema.columns is None
         assert schema.error == {
             "missing": "Table not found.", "provider": "RuntimeError", "malformed": "ValidationError",
         }[outcome]
     else:
-        assert context["schemas"][0].columns == ({} if outcome == "empty" else {"value": "column"})
-
-
-async def test_real_schema_collector_preserves_usable_siblings(plugin, maintained_strategy):
-    plugin.get_all_tables_info.return_value = {"tables": [{"table": "Empty"}, {"table": "Usable"}]}
-    plugin.search.search.side_effect = [
-        {"value": []},
-        {"value": [{"table": "Empty", "columns": []}]},
-        {"value": [{"table": "Usable", "columns": [{"name": "value", "description": "column"}]}]},
-    ]
-    context = await maintained_strategy._collect_schema_context("source", "question")
-    assert [schema.table for schema in context["schemas"]] == ["Empty", "Usable"]
-    assert [schema.table for schema in context["unavailable_schemas"]] == ["Orders"]
+        assert schema.columns == ({} if outcome == "empty" else {"value": "column"})
 
 
 @pytest.mark.parametrize("outcome", ["validation", "execution", "success", "cancelled"])
-async def test_real_sql_flow_retains_ordinary_answers(plugin, maintained_strategy, outcome):
-    plugin.search.search.return_value = {"value": []}
-    if outcome == "validation":
-        maintained_strategy._run_agent.side_effect = [
-            '{"datasource_name":"source","datasource_type":"sql_database"}',
-            '{"sql_query":"DELETE FROM Orders"}',
-        ]
+async def test_native_sql_tool_retains_typed_outcomes(plugin, outcome):
     plugin.cosmos.get_document.return_value = {
         "id": "source", "description": "test", "type": "sql_database",
         "server": "db.example.invalid", "database": "test",
@@ -241,34 +201,25 @@ async def test_real_sql_flow_retains_ordinary_answers(plugin, maintained_strateg
     connection.close.side_effect = RuntimeError("private cleanup")
     client = SimpleNamespace(create_connection=AsyncMock(return_value=connection))
 
-    async def synthesize(instructions, message, **kwargs):
-        assert '"results": []' in message
-        yield "No rows."
-
-    maintained_strategy._stream_agent = synthesize
     with patch("plugins.nl2sql.plugin.SQLDBClient", return_value=client):
         if outcome == "cancelled":
             with pytest.raises(asyncio.CancelledError) as raised:
-                _ = [part async for part in maintained_strategy.initiate_agent_flow("question")]
+                await plugin.execute_sql_query("source", "SELECT 1")
             assert raised.value is cancellation
-            assert maintained_strategy.conversation["messages"] == []
             cursor.close.assert_called_once_with()
             connection.close.assert_called_once_with()
             return
-        answer = "".join([part async for part in maintained_strategy.initiate_agent_flow("question")])
-    sql_context = maintained_strategy._run_agent.await_args_list[1].args[1]
-    assert 'Unavailable schemas:' in sql_context
-    assert '"error": "Table not found."' in sql_context
+        result = await plugin.execute_sql_query("source", "DELETE FROM Orders" if outcome == "validation" else "SELECT 1")
     if outcome == "validation":
-        assert "did not pass validation" in answer
+        assert result.error
         plugin.cosmos.get_document.assert_not_awaited()
         connection.close.assert_not_called()
     else:
-        assert answer == ("The SQL query could not be executed: ValueError" if outcome == "execution" else "No rows.")
+        assert result.error == ("ValueError" if outcome == "execution" else None)
+        assert result.results == (None if outcome == "execution" else [])
         cursor.close.assert_called_once_with()
         connection.close.assert_called_once_with()
-    assert maintained_strategy.conversation["messages"][-1] == {"role": "assistant", "text": answer}
-    assert "private" not in answer
+    assert "private" not in result.model_dump_json()
 
 
 @pytest.mark.parametrize("stage", ["configuration", "connect", "execute", "fetch", "cancelled", "success"])

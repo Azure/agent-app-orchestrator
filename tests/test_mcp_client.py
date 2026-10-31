@@ -2,10 +2,10 @@ import asyncio
 import json
 from contextlib import asynccontextmanager
 
-import httpx
+import httpx2 as httpx
 import pytest
-from agent_framework import TextContent
-from mcp.server.fastmcp import FastMCP
+from agent_framework import Content
+from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
 from connectors import mcp_client
@@ -339,19 +339,22 @@ class _CaptureHeaders:
 
 @pytest.mark.asyncio
 async def test_streamable_http_in_process_transport_contract():
-    server = FastMCP(
-        "contract-test",
-        stateless_http=True,
-        transport_security=TransportSecuritySettings(
-            enable_dns_rebinding_protection=False
-        ),
-    )
+    # Stateless ASGI transport cannot hold the subscription stream open.
+    # Disable that optional server capability using the published API.
+    server = MCPServer("contract-test", subscriptions=False)
 
     @server.tool()
     def echo(text: str) -> str:
         return text
 
-    app = server.streamable_http_app()
+    app = server.streamable_http_app(
+        stateless_http=True,
+        json_response=True,
+        transport_security=TransportSecuritySettings(
+            enable_dns_rebinding_protection=False
+        ),
+    )
+
     captured_app = _CaptureHeaders(app)
 
     def client_factory(**kwargs):
@@ -378,5 +381,5 @@ async def test_streamable_http_in_process_transport_contract():
         and request["x-api-key"] == "contract-key"
         for request in captured_app.requests
     )
-    assert isinstance(result[0], TextContent)
+    assert isinstance(result[0], Content) and result[0].type == "text"
     assert result[0].text == "hello"

@@ -55,7 +55,7 @@ class SQLDBClient:
                 AzureCliCredential()
             )
             try:
-                token = credential.get_token("https://database.windows.net/.default")
+                token = await asyncio.to_thread(credential.get_token, "https://database.windows.net/.default")
                 token_bytes = token.token.encode("UTF-16-LE")
                 token_struct = struct.pack(f'<I{len(token_bytes)}s', len(token_bytes), token_bytes)
                 SQL_COPT_SS_ACCESS_TOKEN = 1256
