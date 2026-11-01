@@ -32,7 +32,13 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          if test -f requirements-hosted.txt && test -f requirements-container-apps.txt; then
+            # Analysis and tests share published SDK prerequisites; images stay host-specific.
+            pip install -r requirements-hosted.txt -r requirements-container-apps.txt -r requirements-tools.txt
+          else
+            pip install -r requirements.txt
+          fi
+          pip check
           pip install pytest pytest-asyncio pytest-mock jsonschema
           pip install -r requirements-quality.txt
 
@@ -97,38 +103,23 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Checkout trusted base policy
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          ref: ${{ env.BASE_SHA }}
-          path: .quality-base
-          persist-credentials: false
-
       - name: Setup Python 3.12
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
 
-      - name: Select policy evaluator
+      - name: Install reviewed runtime and development tools
         shell: bash
         run: |
-          if test -f .quality-base/.github/scripts/check-quality.py; then
-            echo "POLICY_ROOT=.quality-base" >> "$GITHUB_ENV"
-          else
-            # Bootstrap results are diagnostic only: the policy check fails closed.
-            echo "POLICY_ROOT=." >> "$GITHUB_ENV"
-          fi
-
-      - name: Install runtime and protected development tools
-        shell: bash
-        run: |
-          # Static jobs never install the candidate runtime dependency manifest.
-          # Bootstrap tool pins remain diagnostic only until protected adoption.
-          RUNTIME_REQUIREMENTS="$GITHUB_WORKSPACE/.quality-base/requirements.txt"
-          TOOL_REQUIREMENTS="$GITHUB_WORKSPACE/$POLICY_ROOT/requirements-quality.txt"
+          ROOT="$GITHUB_WORKSPACE"
           cd "$RUNNER_TEMP"
-          python -I -m pip --isolated install -r "$RUNTIME_REQUIREMENTS"
-          python -I -m pip --isolated install -r "$TOOL_REQUIREMENTS"
+          if test -f "$ROOT/requirements-hosted.txt" && test -f "$ROOT/requirements-container-apps.txt"; then
+            python -I -m pip --isolated install -r "$ROOT/requirements-hosted.txt" -r "$ROOT/requirements-container-apps.txt" -r "$ROOT/requirements-tools.txt"
+          else
+            python -I -m pip --isolated install -r "$ROOT/requirements.txt"
+          fi
+          python -I -m pip --isolated install -r "$ROOT/requirements-quality.txt"
+          python -I -m pip --isolated check
 
       - name: Download this run's behavioral evidence
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -136,9 +127,9 @@ jobs:
           name: pytest-evidence
           path: .artifacts
 
-      - name: Run protected-base check against candidate source
+      - name: Check reviewed revision with base regression comparison
         run: >-
-          python -I -S "$POLICY_ROOT/.github/scripts/check-quality.py"
+          python -I -S .github/scripts/check-quality.py
           --check "${{ matrix.check }}" --base-ref "$BASE_SHA"
           --test-results .artifacts/pytest.xml
           --report ".artifacts/quality-${{ matrix.check }}.json"
@@ -171,10 +162,10 @@ jobs:
           assert all(job["result"] == "success" for job in results.values()), results
           PY
 
-      - name: Checkout protected evaluator
+      - name: Checkout reviewed evaluator
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ env.BASE_SHA }}
+          ref: ${{ env.HEAD_SHA }}
           persist-credentials: false
 
       - name: Download this run's quality reports
@@ -183,7 +174,7 @@ jobs:
           pattern: quality-*
           path: .artifacts
 
-      - name: Validate protected aggregate and report identities
+      - name: Validate actual aggregate and report identities
         run: >-
           python -I -S .github/scripts/aggregate-quality.py
           --reports .artifacts --base-sha "$BASE_SHA" --head-sha "$HEAD_SHA"

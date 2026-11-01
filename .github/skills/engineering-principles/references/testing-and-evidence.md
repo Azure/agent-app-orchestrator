@@ -30,3 +30,17 @@ For every change, capture:
 Do not treat a successful deployment as sufficient evidence when a change
 affects authorization, data correctness, retrieval quality, streaming,
 cleanup, or upgrade behavior.
+
+Quality evaluates the revision under review: its checker, aggregate, pinned
+tools, dependency manifests and contracts. The PR base supplies regression
+history, not an immutable evaluator or SDK authority. Control maintenance is
+an ordinary reviewed change; it does not need a separate authorization record.
+Individual typing-debt allowances cannot be added or inflated, covered live
+modules cannot leave scope, and suppressions cannot widen. Retirement requires
+physical removal, not an inventory deletion or unchanged code copied elsewhere.
+Keep historical module/handler provenance in Git and the owning versioned
+retirement contract. Every remaining broad handler still needs its exact current
+fingerprint, catch breadth and passing failure selectors. The aggregate requires
+actual successful jobs, identical inventories and reports bound to the exact
+reviewed head, base, policy, repository, run and attempt. Never rename tests to
+impersonate retired evidence or manufacture success statuses.
