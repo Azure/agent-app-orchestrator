@@ -1,6 +1,9 @@
 {
   "application_major_version": 6,
   "decision": "Agent Landing Zone ADR-0034",
+  "retired_exception_modules": ["main", "api.hosted_entrypoint", "orchestration.orchestrator"],
+  "replaced_sql_exception_record": "nl2sql-sql-result-translation",
+  "exception_adoption_status": "Protected historical approvals remain unusable for retired/replaced handlers; no new approval or baseline waiver.",
   "retired_contracts": [
     "AGENT_STRATEGY and AgentStrategyFactory execution",
     "Classic /orchestrator, /conversations and /api/dashboard",

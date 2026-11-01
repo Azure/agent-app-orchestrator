@@ -24,6 +24,9 @@
   `contracts/native-major-retirement.json`; no test skip or guardrail waiver is added.
   Preserve shared connector fixtures and Search/Cosmos failure and permission
   tests independently of the retired HTTP and strategy bootstraps.
+  Keep retirement-aware quality negative controls: historical approvals must
+  fail for removed/replaced handlers, and changed SQL handlers still require
+  exact protected adoption rather than inheriting legacy allowances.
 
 ### Fixed
 

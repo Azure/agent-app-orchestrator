@@ -15,6 +15,10 @@ QUALITY = runpy.run_path(
     str(Path(__file__).resolve().parents[1] / ".github/scripts/check-quality.py")
 )
 
+# Major-version retirement must make the old approvals unusable, not waive them.
+RETIRED_EXCEPTION_MODULES = {"main", "api.hosted_entrypoint", "orchestration.orchestrator"}
+REPLACED_SQL_RECORD = "nl2sql-sql-result-translation"
+
 
 def tree(tmp_path, files):
     for name, text in files.items():
@@ -854,10 +858,18 @@ def test_adopted_compatibility_record_is_exact_and_proposals_still_fail(record_i
                if h["module_id"] == record["module_id"]
                and h["symbol"] == record["symbol"]
                and h["handler_fingerprint"] == record["handler_fingerprint"]]
-    assert len(current) == 1
     assert record["status"] == "active"
     assert record["failure_outcome"] == outcome
     passed = set(record["evidence_tests"])
+    if record["module_id"] in RETIRED_EXCEPTION_MODULES or record_id == REPLACED_SQL_RECORD:
+        assert current == []
+        # Neither historical approval nor synthetic passing selectors can
+        # authorize a handler that has been removed or structurally replaced.
+        assert QUALITY["check_exceptions"](current, [{**record, "status": "proposed"}], passed)
+        assert QUALITY["check_exceptions"](current, [record], passed)
+        assert QUALITY["check_exceptions"](current, [record], set())
+        return
+    assert len(current) == 1
     assert QUALITY["check_exceptions"](current, [{**record, "status": "proposed"}], passed)
     reviewed_fixture = [{**record, "status": "active"}]
     assert not QUALITY["check_exceptions"](current, reviewed_fixture, passed)
@@ -870,12 +882,13 @@ def test_adopted_non_audit_turn_record_still_requires_approval_and_evidence():
     record = next(r for r in records if r["id"] == "turn-error-event-before-propagation")
     current = [h for h in QUALITY["handlers"](QUALITY["collect"](root, ["src"]))
                if h["module_id"] == record["module_id"] and h["symbol"] == record["symbol"]]
-    assert len(current) == 1
+    assert record["module_id"] in RETIRED_EXCEPTION_MODULES
+    assert current == []
     assert record["failure_outcome"] == "propagation"
     assert record["status"] == "active"
     passed = set(record["evidence_tests"])
     assert QUALITY["check_exceptions"](current, [{**record, "status": "proposed"}], passed)
-    assert not QUALITY["check_exceptions"](current, [{**record, "status": "active"}], passed)
+    assert QUALITY["check_exceptions"](current, [{**record, "status": "active"}], passed)
     assert QUALITY["check_exceptions"](current, [{**record, "status": "active"}], set())
 
 
@@ -899,7 +912,29 @@ def test_initial_adoption_activates_only_existing_records_and_preserves_retireme
     assert policy["review"]["reference"] == approval
     current = QUALITY["handlers"](QUALITY["collect"](root, ["src"]))
     key = lambda item: (item["module_id"], item["symbol"], item["handler_fingerprint"])
-    assert {key(record) for record in records} == {key(handler) for handler in current}
+    record_keys = {key(record) for record in records}
+    current_keys = {key(handler) for handler in current}
+    retired_keys = {
+        key(record) for record in records
+        if record["module_id"] in RETIRED_EXCEPTION_MODULES
+        or record["id"] == REPLACED_SQL_RECORD
+    }
+    assert record_keys - current_keys == retired_keys
+    assert {
+        (handler["module_id"], handler["symbol"])
+        for handler in current if key(handler) not in record_keys
+    } == {
+        ("plugins.nl2sql.plugin", "NL2SQLPlugin.execute_sql_query"),
+        ("plugins.nl2sql.plugin", "NL2SQLPlugin._execute_bounded_sql"),
+        ("plugins.nl2sql.plugin", "NL2SQLPlugin._bounded_query"),
+    }
+    # The protected gate still fails closed on both stale approvals and the
+    # changed SQL handlers, even if all historical evidence selectors are present.
+    passed = {selector for record in records for selector in record["evidence_tests"]}
+    findings = QUALITY["check_exceptions"](current, records, passed)
+    assert findings
+    assert any(finding["rule"] == "broad-handler" for finding in findings)
+    assert any(finding["rule"] == "unused-exception" for finding in findings)
 
 
 @pytest.mark.parametrize("file,mutate", [

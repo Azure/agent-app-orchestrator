@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from .turn import (
     TurnCancelledEvent,
@@ -16,11 +16,7 @@ from .turn import (
     TurnToolStatus,
 )
 
-if TYPE_CHECKING:
-    from .orchestrator import Orchestrator
-
 __all__ = [
-    "Orchestrator",
     "TurnCancelledEvent",
     "TurnCitation",
     "TurnCitationEvent",
@@ -37,7 +33,5 @@ __all__ = [
 
 def __getattr__(name: str) -> Any:
     if name == "Orchestrator":
-        from .orchestrator import Orchestrator
-
-        return Orchestrator
+        raise RuntimeError("Classic orchestration is retired; use native.hosted or native.durable.")
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
