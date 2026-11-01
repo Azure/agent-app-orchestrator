@@ -591,7 +591,7 @@ def test_only_verified_retirement_can_remove_blocking_scope(policy_repo):
     (lambda config: config["tool"]["mypy"].update(overrides=[]), "typing-scope"),
     (lambda config: config["tool"]["mypy"]["overrides"].append({"module": ["*"], "ignore_errors": True}), "suppression"),
     (lambda config: config["tool"]["mypy"]["overrides"].append({"module": ["*"], "check_untyped_defs": False}), "typing-scope"),
-    (lambda config: config["tool"]["ruff"].update(force_exclude=True), "suppression"),
+    (lambda config: config["tool"]["ruff"].update({"force-exclude": True}), "suppression"),
 ])
 def test_reviewed_configuration_cannot_weaken_checks_or_widen_suppression(mutation, rule):
     old = {"tool": {
