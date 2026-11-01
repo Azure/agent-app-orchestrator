@@ -21,6 +21,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0 # Retirement/provenance tests verify immutable historical source.
           persist-credentials: false
 
       - name: Setup Python 3.12

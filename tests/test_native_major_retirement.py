@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 
 import pytest
+import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +18,17 @@ def historical_json(path: str) -> dict:
         cwd=ROOT, capture_output=True, text=True, check=True,
     )
     return json.loads(result.stdout)
+
+
+def test_evidence_job_fetches_immutable_provenance_history():
+    pipeline = yaml.safe_load((ROOT / ".github/workflows/pr_pipeline.yaml").read_text())
+    checkouts = [
+        step for step in pipeline["jobs"]["tests"]["steps"]
+        if step.get("uses", "").startswith("actions/checkout@")
+    ]
+    assert len(checkouts) == 1
+    assert checkouts[0]["with"]["fetch-depth"] == 0
+    assert checkouts[0]["with"]["persist-credentials"] is False
 
 
 def test_physical_retirement_matches_source_backed_inventory():
