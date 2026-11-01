@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Consume independent NL2SQL MCP through generic `MCP_ENABLED` registration.
+  `MCP_AUTH_RESOURCE_SCOPE=api://<MCP API client ID>/.default` selects
+  request-scoped managed-identity bearer authentication, refreshed before
+  expiry without API-key fallback. Without the scope, external API-key MCP
+  remains supported. Accept `streamable-http` and JSON trusted-host arrays.
+- Refresh generic MCP enablement and connection/auth settings per native
+  invocation, including false-to-true activation after parent identity setup
+  and resumed workflows. Other capability redeployment guards remain unchanged.
+- Preserve MCP schema-version-1 structured query results (source, query and
+  metadata IDs, typed columns, rows and count), with text-only JSON support
+  and explicit tool errors through the official client.
+
+### Removed
+
+- **Breaking:** remove direct NL2SQL registration, SQL/Fabric/DAX connectors,
+  SQL validation/plugin/result types, SQL prompt and exclusive ODBC/sqlparse
+  dependencies. No legacy SQL or GPT-RAG MCP fallback is provided.
+  `NL2SQL_ENABLED`, `NL2SQL_SOURCE_REGISTRY`, `NL2SQL_QUERY_TIMEOUT_SECONDS`,
+  `NL2SQL_MAX_ROWS`, `DATASOURCES_CONTAINER`, `NL2SQL_STORAGE_CONTAINER`,
+  `SEARCH_TABLES_INDEX_NAME`, `SEARCH_MEASURES_INDEX_NAME`,
+  `SEARCH_QUERIES_INDEX_NAME`, `SEARCH_TABLES_INDEX_TOP_K` and
+  `SEARCH_QUERIES_INDEX_TOP_K` no longer configure orchestrator SQL.
+  Use MCP `nl2sql.list_sources` and `nl2sql.query`; the server owns approved
+  SQL access and Cosmos vector metadata. Native hosts/modes and SDK pins
+  are unchanged. Coordinated platform resource/identity configuration and
+  central documentation are required before adoption; no release is published.
+
 ## [v6.0.0] - 2026-11-01
 
 ### Changed

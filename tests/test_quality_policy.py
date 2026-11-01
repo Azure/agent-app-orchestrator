@@ -984,15 +984,12 @@ def test_initial_adoption_activates_only_existing_records_and_preserves_retireme
     assert {
         (handler["module_id"], handler["symbol"])
         for handler in current if key(handler) not in record_keys
-    } == {
-        ("plugins.nl2sql.plugin", "NL2SQLPlugin._bounded_query"),
-    }
-    # The protected gate still fails closed on both stale approvals and the
-    # changed SQL handlers, even if all historical evidence selectors are present.
+    } == set()
+    # Direct SQL's worker is now physically removed, not a broadly caught MCP
+    # fallback. Historical approvals still fail even with synthetic evidence.
     passed = {selector for record in records for selector in record["evidence_tests"]}
     findings = QUALITY["check_exceptions"](current, records, passed)
     assert findings
-    assert any(finding["rule"] == "broad-handler" for finding in findings)
     assert any(finding["rule"] == "unused-exception" for finding in findings)
 
 

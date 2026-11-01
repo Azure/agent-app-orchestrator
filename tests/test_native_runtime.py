@@ -127,7 +127,7 @@ async def test_scoped_selectors_refresh_snapshot_and_secrets():
     providers[0].values["CHAT_TEMPERATURE"] = "0.8"
     assert (await config.view()).get("CHAT_TEMPERATURE", type=float) == 0.8
     assert (await config.view(snapshot)).get("CHAT_TEMPERATURE", type=float) == 0.2
-    assert len(providers) == 1
+    assert len(providers) == 4  # One base plus three request-owned MCP reads.
     assert providers[0].refresh.call_count == 3
     await config.close()
     providers[0].close.assert_called_once()
@@ -141,6 +141,10 @@ def test_snapshot_does_not_contain_credential_values():
 
 async def test_only_enabled_consumers_select_their_secrets_and_snapshot_keeps_them_current():
     calls, providers = [], []
+    all_values = {
+        **BASE, "MCP_ENABLED": True, "MCP_API_KEY": "synthetic-first-secret",
+        "MCP_APP_ENDPOINT": "https://mcp.example.invalid", "MCP_TRUSTED_HOSTS": "mcp.example.invalid",
+    }
 
     def loader(**kwargs):
         keys = [selector.key_filter for selector in kwargs["selects"]]
@@ -149,10 +153,6 @@ async def test_only_enabled_consumers_select_their_secrets_and_snapshot_keeps_th
         provider.items.side_effect = lambda: provider.values.items()
         provider.keys.side_effect = lambda: provider.values.keys()
         provider.__getitem__.side_effect = lambda key: provider.values[key]
-        all_values = {
-            **BASE, "MCP_ENABLED": True, "MCP_API_KEY": "synthetic-first-secret",
-            "MCP_APP_ENDPOINT": "https://mcp.example.invalid", "MCP_TRUSTED_HOSTS": "mcp.example.invalid",
-        }
         provider.values = {k: v for k, v in all_values.items() if k in keys}
         providers.append(provider)
         return provider
@@ -160,12 +160,14 @@ async def test_only_enabled_consumers_select_their_secrets_and_snapshot_keeps_th
     config = await NativeConfig("https://config.example.invalid", None, None, loader).open()
     try:
         snapshot = FunctionalSnapshot.capture((await config.view()).values)
-        assert len(calls) == 2 and calls[0][1] is False and calls[1][1] is True
+        assert len(calls) == 3 and calls[0][1] is False and calls[1][1] is False and calls[2][1] is True
         assert "AUDIT_HMAC_KEY" not in calls[1][0]
-        providers[1].values["MCP_API_KEY"] = "synthetic-refreshed-secret"
+        all_values["MCP_API_KEY"] = "synthetic-refreshed-secret"
         assert (await config.view(snapshot)).get("MCP_API_KEY") == "synthetic-refreshed-secret"
         assert "synthetic-first-secret" not in snapshot.model_dump_json()
-        providers[0].values["MCP_ENABLED"] = False
+        all_values["MCP_ENABLED"] = False
+        assert (await config.view(snapshot)).get("MCP_ENABLED", type=bool) is False
+        providers[0].values["MULTIMODAL_ENABLED"] = True
         with pytest.raises(ValueError, match="redeploy"):
             await config.view()
     finally:
@@ -174,7 +176,7 @@ async def test_only_enabled_consumers_select_their_secrets_and_snapshot_keeps_th
 
 def test_existing_connectors_use_invocation_config_without_classic_bootstrap(monkeypatch):
     import dependencies
-    view = ConfigView({"DATASOURCES_CONTAINER": "sources"})
+    view = ConfigView({"SEARCH_RAG_INDEX_NAME": "documents"})
     with config_scope(view):
         assert dependencies.get_config() is view
         assert dependencies.get_config("refresh") is view

@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Callable, Mapping
-from contextlib import asynccontextmanager
+import os
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Mapping
+from contextlib import AsyncExitStack, asynccontextmanager
+from functools import partial
 from typing import Any, Literal
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx2 as httpx
 from agent_framework import MCPStreamableHTTPTool
 from agent_framework._mcp import MCPTool
+from azure.core.exceptions import AzureError, ClientAuthenticationError
+from azure.identity.aio import ManagedIdentityCredential, get_bearer_token_provider
 from mcp.client.sse import sse_client
 from opentelemetry.instrumentation.utils import suppress_http_instrumentation
 from opentelemetry.trace.propagation.tracecontext import (
@@ -25,6 +29,27 @@ _TRANSPORT_PATHS: dict[MCPTransport, str] = {
     "sse": "sse",
     "streamable_http": "mcp",
 }
+
+
+class _ManagedIdentityAuth(httpx.Auth):
+    """Acquire/refresh only the MCP resource token before each HTTP request."""
+
+    def __init__(self, credential: ManagedIdentityCredential, scope: str) -> None:
+        # Azure's async policy caches valid tokens and refreshes before expiry.
+        # The policy and credential belong to this invocation, not a global cache.
+        self._token_provider = get_bearer_token_provider(credential, scope)
+
+    async def async_auth_flow(self, request: httpx.Request) -> AsyncGenerator[httpx.Request, httpx.Response]:
+        try:
+            token = await self._token_provider()
+        except AzureError:
+            # No request, API-key retry, or provider/token details on failure.
+            raise ClientAuthenticationError("MCP managed identity token acquisition failed.") from None
+        if not token:
+            raise ClientAuthenticationError("MCP managed identity returned an empty token.")
+        request.headers.pop("X-API-KEY", None)
+        request.headers["Authorization"] = f"Bearer {token}"
+        yield request
 
 
 class _TraceContextOnlyAsyncTransport(httpx.AsyncBaseTransport):
@@ -65,7 +90,7 @@ def _trace_context_only_http_client_factory(
 def normalize_mcp_transport(value: str | None) -> MCPTransport:
     """Validate and normalize the configured MCP transport."""
 
-    transport = (value or "sse").strip().lower()
+    transport = (value or "sse").strip().lower().replace("-", "_")
     if transport not in _SUPPORTED_TRANSPORTS:
         raise ValueError(
             f"Invalid MCP_SERVER_TRANSPORT '{value}'. "
@@ -118,9 +143,9 @@ def build_mcp_headers(
     ``foundry_call_id`` is echoed outbound only: it is the opaque,
     per-request call id the Foundry hosted-agent platform injects on the
     inbound ``/invocations`` request. Toolbox uses it to resolve the
-    signed-in user and apply native document-level security -- this
-    codebase never reads or forwards an ``Authorization`` header, and never
-    sends caller/model identity fields or ``x-client`` group claims.
+    signed-in user and apply native document-level security. Inbound
+    ``Authorization`` is never forwarded. Independent-resource bearer auth
+    is acquired separately, never from caller/SQL/Search credentials.
     """
 
     headers = {"user-context": json.dumps(dict(user_context or {}))}
@@ -176,6 +201,7 @@ async def open_mcp_tool(
     timeout: int,
     user_context: Mapping[str, Any] | None,
     api_key: str | None,
+    auth_resource_scope: str | None = None,
     foundry_call_id: str | None = None,
     http_client_factory: Callable[..., httpx.AsyncClient] = httpx.AsyncClient,
 ) -> AsyncIterator[MCPTool]:
@@ -186,41 +212,55 @@ async def open_mcp_tool(
 
     normalized_transport = normalize_mcp_transport(transport)
     url = resolve_mcp_endpoint(endpoint, normalized_transport)
-    headers = build_mcp_headers(user_context, api_key, foundry_call_id)
-
-    if normalized_transport == "sse":
-        # The legacy SSE client is aiohttp-based and is not covered by the
-        # process-wide HTTPX instrumentation. Inject W3C trace context only;
-        # baggage is intentionally excluded.
-        TraceContextTextMapPropagator().inject(headers)
-        tool = LegacySSEMCPTool(
-            name="McpServerPlugin",
-            url=url,
-            headers=headers,
-            request_timeout=timeout,
-            httpx_client_factory=_trace_context_only_http_client_factory,
-        )
-        async with tool:
-            yield tool
-        return
-
-    client_kwargs: dict[str, Any] = {
-        "headers": headers,
-        "timeout": httpx.Timeout(float(timeout)),
-    }
-    if http_client_factory is httpx.AsyncClient:
-        client_kwargs["transport"] = _TraceContextOnlyAsyncTransport()
-    http_client = http_client_factory(
-        **client_kwargs,
+    if auth_resource_scope is not None:
+        scope = auth_resource_scope.strip()
+        if (
+            not scope.startswith("api://") or not scope.endswith("/.default")
+            or not scope[6:-9] or any(c.isspace() for c in scope)
+        ):
+            raise ValueError("MCP_AUTH_RESOURCE_SCOPE must be a dedicated api:// resource /.default scope.")
+    headers = build_mcp_headers(
+        user_context, None if auth_resource_scope is not None else api_key, foundry_call_id,
     )
-    async with http_client:
+
+    async with AsyncExitStack() as resources:
+        tool: MCPTool
+        auth = None
+        if auth_resource_scope is not None:
+            credential = await resources.enter_async_context(ManagedIdentityCredential(
+                client_id=os.environ.get("AZURE_CLIENT_ID") or None,
+            ))
+            auth = _ManagedIdentityAuth(credential, scope)
+
+        if normalized_transport == "sse":
+            TraceContextTextMapPropagator().inject(headers)
+            tool = LegacySSEMCPTool(
+                name="McpServerPlugin",
+                url=url,
+                headers=headers,
+                request_timeout=timeout,
+                httpx_client_factory=partial(_trace_context_only_http_client_factory, auth=auth),
+            )
+            await resources.enter_async_context(tool)
+            yield tool
+            return
+
+        client_kwargs: dict[str, Any] = {
+            "headers": headers,
+            "timeout": httpx.Timeout(float(timeout)),
+        }
+        if auth is not None:
+            client_kwargs["auth"] = auth
+        if http_client_factory is httpx.AsyncClient:
+            client_kwargs["transport"] = _TraceContextOnlyAsyncTransport()
+        http_client = await resources.enter_async_context(http_client_factory(**client_kwargs))
         tool = MCPStreamableHTTPTool(
             name="McpServerPlugin",
             url=url,
             request_timeout=timeout,
             load_prompts=False,
             http_client=http_client,
-            tool_result_content="content_only",
+            tool_result_content="structured_first",
         )
-        async with tool:
-            yield tool
+        await resources.enter_async_context(tool)
+        yield tool

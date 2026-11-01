@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "decision": "Approved independent NL2SQL extraction; shared mcp-implementation/contract.json schema_version 1",
+  "source_inventory_revision": "800348ecde277c4fbf44dba6df62f47c953a34fa",
+  "physically_retired_modules": [
+    "connectors.fabric", "connectors.sqldbs", "connectors.types",
+    "plugins.nl2sql.plugin", "plugins.nl2sql.nl2sql_types", "plugins.nl2sql.sql_validation"
+  ],
+  "retired_exception_ids": [
+    "nl2sql-table-list-result-translation", "nl2sql-schema-unavailable-compatibility",
+    "nl2sql-table-retrieval-result-translation", "nl2sql-measure-list-result-translation",
+    "nl2sql-query-retrieval-result-translation", "nl2sql-dax-result-translation",
+    "nl2sql-sql-cleanup-preserves-primary-outcome", "native-bounded-sql-cleanup"
+  ],
+  "retired_tests": [
+    "tests/test_nl2sql_plugin_boundaries.py", "tests/test_nl2sql_sql_validation.py",
+    "tests/test_sql_connection_boundaries.py"
+  ],
+  "history": "Original current records remain in Git at source_inventory_revision; native major-version and exception history remain unchanged. Physical extraction never waives checks for live modules.",
+  "replacement_behavior_tests": ["tests/test_mcp_client.py", "tests/test_native_tools.py"],
+  "public_tools": ["nl2sql.list_sources", "nl2sql.query"],
+  "query_result_fields": ["schema_version", "source_id", "query_id", "metadata_version", "columns", "rows", "row_count"],
+  "auth_resource_scope": "api://<MCP API client ID>/.default",
+  "auth": "Invocation-owned Azure ManagedIdentityCredential and async bearer policy; never caller/SQL/Search token, never API-key downgrade. AZURE_CLIENT_ID optionally selects user-assigned identity.",
+  "token_issuance_prerequisite": "Parent Entra API registration must request v2 access tokens (api.requestedAccessTokenVersion=2); the dedicated API client ID is the v2 audience. Consumer requests its api://<client-id>/.default scope and does not infer audience from SQL/Search tokens.",
+  "dynamic_configuration": "Load and close only generic MCP settings per invocation on the worker-thread path, including MCP_ENABLED and JSON MCP_TRUSTED_HOSTS. No Hosted republishing or 30-second refresh timer required for MCP activation; unrelated capability guards and refresh timers remain unchanged.",
+  "adoption_order": "Parent configures dedicated invocation resource, caller role and generated endpoint before publishing generic MCP configuration. Server owns approved SQL access and Cosmos vectors.",
+  "rollback": "Redeploy the preceding orchestrator and its configuration as a coordinated rollback; no checkpoint/data conversion and no automatic direct SQL fallback.",
+  "documentation_handoff": "Azure/AI-Landing-Zones main: update NL2SQL selection, MCP resource auth/configuration and breaking direct SQL removal. Owned by the coordinated docs workspace, not this checkout.",
+  "source_policy_review_required": "The unchanged annotation ratchet flags deletion of annotated nl2sql_tools, its execute_dax_query closure and ToolIdentity.dax_token within retained native.tools. This is intentional physical SQL symbol removal, not removal of annotations from surviving functions. No gate exception, checker change, typing-scope reduction or SQL stub is introduced.",
+  "release": "Feature candidate only; no image, tag, release, Azure deployment or main merge."
+}
