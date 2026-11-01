@@ -26,8 +26,8 @@ def main():
     ):
         raise SystemExit("Required test/frontend/quality job was not successful")
     root = Path(__file__).resolve().parents[2]
-    if checker["git"](root, "rev-parse", "HEAD").strip() != args.base_sha:
-        raise SystemExit("Aggregate must execute from the exact protected base checkout")
+    if checker["git"](root, "rev-parse", "HEAD").strip() != args.head_sha:
+        raise SystemExit("Aggregate must execute from the exact reviewed head checkout")
     records = checker["load_records"](root)
     expected = checker["report_identity"](
         records, args.repository, args.run_id, args.run_attempt)

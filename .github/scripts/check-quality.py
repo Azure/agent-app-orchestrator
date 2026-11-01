@@ -1,4 +1,4 @@
-"""Source-only quality checks. Policy authority comes from the PR base, not JSON approvals."""
+"""Source-only quality checks of the reviewed revision, with base regression guards."""
 
 from __future__ import annotations
 
@@ -31,9 +31,6 @@ REPOSITORY = "Azure/agent-app-orchestrator"
 REQUIRED_JOBS = (*CHECKS, "tests", "frontend")
 RECORDS = ("policy.json", "module-surfaces.json", "typing-scope.json",
            "typing-baseline.json", "exceptions.json")
-PROTECTED = (".quality/", ".github/scripts/", ".github/workflows/pr_pipeline.yaml",
-             ".github/CODEOWNERS", "tests/test_quality_policy.py",
-             "requirements-quality.txt", ".importlinter")
 
 
 class QualityError(Exception):
@@ -382,13 +379,15 @@ def collect(root, roots):
     return modules
 
 
-def module_identities(before, after, surfaces=()):
+def module_identities(before, after, surfaces=(), retired=frozenset()):
     stable = {entry["import_name"]: entry["id"] for entry in surfaces}
     identities = {name: stable.get(name, name) for name in after if name in before}
     findings = []
     removed = set(before) - set(after)
     added = set(after) - set(before)
     for old in sorted(removed):
+        if stable.get(old, old) in retired:
+            continue
         matches = [new for new in added
                    if before[old]["fingerprint"] == after[new]["fingerprint"]]
         reverse = [other for other in removed
@@ -765,7 +764,7 @@ def check_exceptions(current, records, passed_tests):
     for handler in current:
         if not any(handler is h for h, _ in approved):
             findings.append(finding("broad-handler", handler["path"], handler["line"],
-                                    "Requires exact protected approval and passing failure evidence",
+                                    "Requires exact current source record and passing failure evidence",
                                     handler=handler))
     for record in records:
         if record["id"] not in used:
@@ -1022,27 +1021,88 @@ def evidence_tests(path, source_root=None):
     return passed
 
 
-def policy_changes(root, base, base_records, candidate):
+def retired_modules(before, after, base_records, candidate):
+    """Only physically removed, non-copied modules can retire inventory/coverage."""
+    current_ids = {entry["id"] for entry in candidate["module-surfaces.json"]["entries"]}
+    retired, findings = set(), []
+    for entry in base_records["module-surfaces.json"]["entries"]:
+        if entry["id"] in current_ids:
+            continue
+        old = before.get(entry["import_name"])
+        if (entry["import_name"] in after or old is None
+                or any(module["fingerprint"] == old["fingerprint"] for module in after.values())):
+            findings.append(finding("false-retirement", entry["path"],
+                                    message="Removed inventory still has live or copied source"))
+        else:
+            retired.add(entry["id"])
+    return retired, findings
+
+
+def policy_changes(root, base, base_records, candidate, retired=frozenset()):
+    """Control maintenance is reviewable; debt inflation and scope erasure are not."""
     findings = []
-    changed = set(git(root, "diff", "--name-only", base, "--").splitlines())
-    changed.update(git(root, "ls-files", "--others", "--exclude-standard").splitlines())
-    for path in sorted(changed):
-        if path.startswith(PROTECTED):
-            # Debt retirement is safe only if every remaining record is byte-equivalent.
-            if path == ".quality/typing-baseline.json":
-                old = base_records["typing-baseline.json"]["entries"]
-                if all(entry in old for entry in candidate["typing-baseline.json"]["entries"]):
-                    continue
-            if path == ".quality/typing-scope.json":
-                old = base_records["typing-scope.json"]
-                new = candidate["typing-scope.json"]
-                if (set(old["module_ids"]) <= set(new["module_ids"])
-                        and {k: v for k, v in old.items() if k != "module_ids"}
-                        == {k: v for k, v in new.items() if k != "module_ids"}):
-                    continue
-            findings.append(finding("protected-policy", path,
-                                    message="Protected quality control differs from base; explicit maintainer authorization required"))
+    old = base_records["typing-baseline.json"]["entries"]
+    if any(entry not in old for entry in candidate["typing-baseline.json"]["entries"]):
+        findings.append(finding("baseline-inflation", ".quality/typing-baseline.json",
+                                message="New or altered debt allowances are not permitted"))
+    old_scope = set(base_records["typing-scope.json"]["module_ids"])
+    old_scope.update(entry["id"] for entry in base_records.get(
+        "module-surfaces.json", {}).get("entries", []) if entry["typing_status"] == "blocking")
+    new_scope = set(candidate["typing-scope.json"]["module_ids"])
+    new_scope.update(entry["id"] for entry in candidate.get(
+        "module-surfaces.json", {}).get("entries", []) if entry["typing_status"] == "blocking")
+    if old_scope - new_scope - set(retired):
+        findings.append(finding("typing-scope", ".quality/typing-scope.json",
+                                message="Surviving covered modules cannot leave blocking scope"))
+    old_inventory = set(base_records.get("policy.json", {}).get("modules", []))
+    new_inventory = set(candidate.get("policy.json", {}).get("modules", []))
+    if new_inventory - old_inventory - new_scope:
+        findings.append(finding("typing-scope", ".quality/policy.json",
+                                message="Inventory additions cannot reclassify new code as legacy"))
     return findings
+
+
+def configuration_changes(before, after):
+    """Permit tool maintenance, not widened suppression or disabled analysis."""
+    found = []
+    old = before.get("tool", {})
+    new = after.get("tool", {})
+    old_lint = old.get("ruff", {}).get("lint", {})
+    new_lint = new.get("ruff", {}).get("lint", {})
+    for key in ("exclude", "extend-exclude", "force-exclude", "respect-gitignore"):
+        if new.get("ruff", {}).get(key) != old.get("ruff", {}).get(key):
+            found.append(finding("suppression", "pyproject.toml", message=f"Source exclusion changed: {key}"))
+    selected = new_lint.get("select", ["E4", "E7", "E9", "F"]) + new_lint.get("extend-select", [])
+    for rule in old_lint.get("select", ["E4", "E7", "E9", "F"]) + old_lint.get("extend-select", []):
+        if not any(rule.startswith(prefix) for prefix in selected):
+            found.append(finding("lint-scope", "pyproject.toml", message=f"Enabled rule removed: {rule}"))
+    for key in ("ignore", "extend-ignore", "per-file-ignores", "extend-per-file-ignores"):
+        if new_lint.get(key, [] if "file" not in key else {}) != old_lint.get(
+                key, [] if "file" not in key else {}):
+            found.append(finding("suppression", "pyproject.toml", message=f"Lint suppression changed: {key}"))
+    old_mypy, new_mypy = old.get("mypy", {}), new.get("mypy", {})
+    for key, value in old_mypy.items():
+        if key.startswith(("check_", "disallow_", "warn_")) and value is True and new_mypy.get(key) is not True:
+            found.append(finding("typing-scope", "pyproject.toml", message=f"Typing check disabled: {key}"))
+    for key in ("ignore_errors", "ignore_missing_imports", "disable_error_code", "exclude"):
+        if new_mypy.get(key) != old_mypy.get(key):
+            found.append(finding("suppression", "pyproject.toml", message=f"Typing suppression changed: {key}"))
+    if new_mypy.get("follow_imports", "normal") != "normal":
+        found.append(finding("typing-scope", "pyproject.toml", message="Imported source must be analyzed"))
+    for override in old_mypy.get("overrides", []):
+        if not any(set(override.get("module", [])) <= set(item.get("module", []))
+                   and all(item.get(key) == value for key, value in override.items() if key != "module")
+                   for item in new_mypy.get("overrides", [])):
+            found.append(finding("typing-scope", "pyproject.toml", message="Covered typing override removed"))
+    for override in new_mypy.get("overrides", []):
+        if any(override.get(key) for key in ("ignore_errors", "ignore_missing_imports", "disable_error_code")):
+            if override not in old_mypy.get("overrides", []):
+                found.append(finding("suppression", "pyproject.toml", message="New typing override suppression"))
+        if override not in old_mypy.get("overrides", []) and any(
+                value is True and key.startswith(("check_", "disallow_", "warn_"))
+                and override.get(key) is False for key, value in old_mypy.items()):
+            found.append(finding("typing-scope", "pyproject.toml", message="New override disables typing checks"))
+    return found
 
 
 def grimp_check(root, modules, edges):
@@ -1132,7 +1192,8 @@ def main(argv=None):
                     dest = trusted / path
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     dest.write_text(git(root, "show", f"{base}:{path}"), encoding="utf-8")
-            records = candidate if bootstrap else load_records(trusted)
+            base_records = candidate if bootstrap else load_records(trusted)
+            records = candidate
             policy = records["policy.json"]
             report["policy_sha"] = digest(records)
             report["bootstrap"] = bootstrap
@@ -1149,13 +1210,20 @@ def main(argv=None):
             modules = collect(root, policy["runtime_roots"])
             before = collect(trusted, policy["runtime_roots"])
             surfaces = records["module-surfaces.json"]["entries"]
-            identities, identity_findings = module_identities(before, modules, surfaces)
+            retired, retirement_findings = retired_modules(before, modules, base_records, candidate)
+            historical_surfaces = base_records["module-surfaces.json"]["entries"]
+            identities, identity_findings = module_identities(
+                before, modules, [*historical_surfaces, *surfaces], retired)
+            identity_findings.extend(retirement_findings)
             scope = set(records["typing-scope.json"]["module_ids"])
-            scope.update(candidate["typing-scope.json"]["module_ids"])
+            scope.update(base_records["typing-scope.json"]["module_ids"])
+            scope.update(entry["id"] for entry in historical_surfaces if entry["typing_status"] == "blocking")
             scope.update(entry["id"] for entry in surfaces if entry["typing_status"] == "blocking")
-            # The protected adoption inventory is immutable across successive PR bases.
+            # Base comparison prevents a reviewed inventory from hiding new code.
             scope.update(identities[n] for n in modules
-                         if n not in policy["modules"] or identities[n] not in policy["modules"])
+                         if n not in base_records["policy.json"]["modules"]
+                         or identities[n] not in base_records["policy.json"]["modules"])
+            scope.difference_update(retired)
             if not scope <= set(identities.values()):
                 identity_findings.append(finding("typing-scope", message="Covered module missing"))
             report["coverage"] = {
@@ -1163,15 +1231,15 @@ def main(argv=None):
                     m["path"] for n, m in modules.items() if identities[n] in scope),
                 "uncovered": sorted(m["path"] for n, m in modules.items() if identities[n] not in scope),
             }
-            config_root = root if bootstrap else trusted
-            base_config = tomllib.loads((config_root / "pyproject.toml").read_text())
+            config_root = root
+            base_config = tomllib.loads((trusted / "pyproject.toml").read_text()) if not bootstrap else tomllib.loads((root / "pyproject.toml").read_text())
             head_config = tomllib.loads((root / "pyproject.toml").read_text())
             analysis = trusted / "analysis"
             analysis.mkdir()
             write_analysis_sources(analysis, modules)
             import_config = (config_root / ".importlinter").read_text() if (
                 config_root / ".importlinter").exists() else ""
-            static_configuration(base_config, import_config)
+            static_configuration(head_config, import_config)
             (analysis / "pyproject.toml").write_text(
                 (config_root / "pyproject.toml").read_text(), encoding="utf-8")
             (analysis / ".importlinter").write_text(import_config, encoding="utf-8")
@@ -1187,16 +1255,13 @@ def main(argv=None):
                             found.append(finding("bootstrap-review", ".quality/policy.json",
                                 message="No protected base policy exists. Bootstrap requires maintainer review and administrator activation."))
                         else:
-                            found.extend(policy_changes(root, base, records, candidate))
-                            for tool in ("ruff", "mypy", "importlinter"):
-                                if base_config.get("tool", {}).get(tool) != head_config.get("tool", {}).get(tool):
-                                    found.append(finding("protected-policy", "pyproject.toml",
-                                                         message=f"{tool} configuration changed"))
+                            found.extend(policy_changes(root, base, base_records, candidate, retired))
+                            found.extend(configuration_changes(base_config, head_config))
                         found.extend(identity_findings)
                         found.extend(surface_findings(candidate["module-surfaces.json"]["entries"],
                                                       modules, identities, scope))
                         found.extend(surface_provenance(root, candidate["module-surfaces.json"]["entries"]))
-                        found.extend(source_policy(before, modules, identities, scope, surfaces))
+                        found.extend(source_policy(before, modules, identities, scope, historical_surfaces))
                         for path in (root / "src").rglob("*"):
                             if path.name in ("pyproject.toml", "mypy.ini", ".mypy.ini",
                                              "ruff.toml", ".ruff.toml", ".importlinter") or path.suffix == ".pyi":
@@ -1247,7 +1312,7 @@ def main(argv=None):
                                 value["file"] = Path(value["file"]).relative_to(analysis).as_posix()
                         blocking, outside = type_findings(values, modules, identities, analysis, scope)
                         baseline = candidate["typing-baseline.json"]["entries"]
-                        trusted_baseline = records["typing-baseline.json"]["entries"]
+                        trusted_baseline = base_records["typing-baseline.json"]["entries"]
                         # Candidate additions are never allowances, even if policy runs separately.
                         baseline = [entry for entry in baseline if entry in trusted_baseline]
                         found = ratchet(blocking, baseline)
