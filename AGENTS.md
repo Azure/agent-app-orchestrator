@@ -158,11 +158,12 @@ instructions before meaningful changes in these areas.
   latest-head approvals are not mandatory. A maintainer can merge their own
   pull request when all required checks pass. `CODEOWNERS` is ownership
   routing, not a second-person approval requirement.
-- Preserve protected-base evaluation, policy integrity, typing coverage,
-  exception evidence and real same-workflow results. Only quality-control
-  workflows receive the protected-policy integrity guard, not unrelated
-  automations. Changing the guardrails requires explicit maintainer
-  authorization, never a candidate's own approval metadata.
+- Preserve reviewed-revision evaluation, report integrity, typing coverage,
+  exception evidence and real same-workflow results. Contributor controls,
+  tools and dependencies are maintained through the PR being reviewed, not
+  frozen to an older base. Base history still guards typing debt, permanent
+  coverage, source suppressions and false retirement. No self-amendment veto
+  or separate approval metadata is required.
 - Do not disable required checks or leave permanent bypasses. Any expressly
   authorized administrative exception must be limited to the intended pull
   requests and removed immediately afterward.
@@ -200,9 +201,9 @@ source-only snapshots with isolated startup, sanitized search/cache environment
 and installed wheel paths exposed without processing `.pth` files. Candidate
 packages are analyzed, never imported. Executable mypy plugins and custom
 Import Linter contracts are rejected, not treated as approved policy. CI quality
-jobs install the protected base runtime dependencies, not the candidate
-manifest; behavioral tests intentionally exercise candidate dependencies in
-their separate job. This is static-tool isolation, not an OS sandbox or
+jobs install the reviewed revision's runtime and development dependencies,
+matching behavioral tests. Native host groups are combined only for analysis
+and tests; production images remain host-specific. This is static-tool isolation, not an OS sandbox or
 protection from a compromised interpreter/tool wheel.
 
 `requirements-quality.txt` pins development tools only; it is not a runtime
@@ -219,15 +220,15 @@ The initial debt baseline is empty. Debt is matched by individual source,
 symbol, diagnostic and multiplicity, not totals. Unambiguous unchanged moves
 retain identity; ambiguous moves/deletions require review.
 
-The protected `module-surfaces.json` classifies every runtime module with a
+The reviewed `module-surfaces.json` classifies every runtime module with a
 stable id, current path/import name, owning area, public exports, private
 modules, exact allowed importers, compatibility aliases, typing status,
 responsibilities and immutable source revision. Its current-path records are
 separate from `policy.json`'s immutable adoption names: editing an inventory
 must not reclassify newly covered code as legacy. Source checks reject missing
 or duplicate ownership, stale exports/aliases, unsupported consumers and
-unverifiable source provenance. Surface changes require explicit maintainer
-authorization; they cannot self-authorize new access. Stable ids follow
+unverifiable source provenance. Surface changes are reviewed with source and exact consumer contracts;
+they cannot hide physically live or copied modules as retired. Stable ids follow
 successive unchanged moves for annotation, diagnostic and handler ownership.
 
 The AST import graph includes flat modules, namespace packages, local and
