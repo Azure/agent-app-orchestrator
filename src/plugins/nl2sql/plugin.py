@@ -3,6 +3,10 @@ import logging
 import time
 from typing import Any, Dict, List, Optional, Annotated
 
+import pyodbc
+from azure.core.exceptions import AzureError
+from pydantic import ValidationError
+
 from .nl2sql_types import (
     DataSourceItem,
     DataSourcesList,
@@ -417,7 +421,9 @@ class NL2SQLPlugin:
             results = [dict(zip(columns, row)) for row in rows]
             return ExecuteQueryResult(results=results)
 
-        except Exception as e:
+        # These are the actual registry/credential, ODBC and typed data-boundary
+        # failures. Programming errors must not become ordinary SQL results.
+        except (AzureError, pyodbc.Error, ValidationError) as e:
             logging.error("execute_sql_query error (%s)", type(e).__name__)
             return ExecuteQueryResult(error=type(e).__name__)
         finally:
@@ -452,11 +458,16 @@ class NL2SQLPlugin:
                 if task.cancelled():
                     raise
                 cancellation = cancelled
-            except Exception as error:
-                if cancellation is None:
-                    raise
-                logging.warning("Cancelled SQL operation failed (%s)", type(error).__name__)
-                raise cancellation from None
+            finally:
+                # Inspect the completed task, rather than catch arbitrary worker
+                # failures. Once caller cancellation is recorded it remains the
+                # primary outcome, including a competing driver/programming error.
+                if cancellation is not None and task.done():
+                    if not task.cancelled():
+                        error = task.exception()
+                        if error is not None:
+                            logging.warning("Cancelled SQL operation failed (%s)", type(error).__name__)
+                    raise cancellation from None
         if cancellation is not None:
             raise cancellation
         return result

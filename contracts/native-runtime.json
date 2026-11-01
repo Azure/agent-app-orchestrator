@@ -110,6 +110,12 @@
     },
     "nl2sql_query_timeout_seconds": 30,
     "nl2sql_max_rows": 1000,
+    "nl2sql_failure_boundary": {
+      "translated": ["pyodbc.Error", "azure.core.exceptions.AzureError", "pydantic.ValidationError"],
+      "unexpected_implementation_failures": "propagate, with acquired cursor/connection cleanup",
+      "cancelled_worker_failures": "recorded caller cancellation remains primary; no catch-all translation",
+      "cleanup_review": "catch-all cleanup preservation still requires exact protected evidence/adoption"
+    },
     "dax_requires_invocation_local_delegation": true,
     "multimodal_function": "multimodal_retrieve",
     "iq_tool_name": "foundry-iq",

@@ -5,6 +5,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
+import pyodbc
+from azure.core.exceptions import AzureError
 
 from plugins.nl2sql.plugin import NL2SQLPlugin
 
@@ -100,7 +102,7 @@ async def test_sql_acquired_resources_close_without_replacing_outcome(
     releases = MagicMock()
     releases.attach_mock(cursor.close, "cursor")
     releases.attach_mock(connection.close, "connection")
-    failure = asyncio.CancelledError(marker) if stage == "cancelled" else ValueError(marker)
+    failure = asyncio.CancelledError(marker) if stage == "cancelled" else pyodbc.Error(marker)
     if stage == "cursor":
         connection.cursor.side_effect = failure
     elif stage in {"execute", "cancelled"}:
@@ -120,7 +122,7 @@ async def test_sql_acquired_resources_close_without_replacing_outcome(
             assert raised.value is failure
         else:
             result = await plugin.execute_sql_query("source", "SELECT 1")
-            expected_error = "ValidationError" if stage == "mapping" else "ValueError"
+            expected_error = "ValidationError" if stage == "mapping" else "Error"
             assert result.model_dump() == (
                 {"results": [] if stage == "empty" else [{"value": 1}], "error": None}
                 if stage in {"success", "empty"} else {"results": None, "error": expected_error}
@@ -190,7 +192,7 @@ async def test_native_sql_tool_retains_typed_outcomes(plugin, outcome):
     cursor.description = [("value",)]
     cursor.fetchall.return_value = []
     if outcome == "execution":
-        cursor.execute.side_effect = ValueError("private SQL")
+        cursor.execute.side_effect = pyodbc.Error("private SQL")
     cancellation = asyncio.CancelledError("private cancellation")
     if outcome == "cancelled":
         cursor.execute.side_effect = cancellation
@@ -215,7 +217,7 @@ async def test_native_sql_tool_retains_typed_outcomes(plugin, outcome):
         plugin.cosmos.get_document.assert_not_awaited()
         connection.close.assert_not_called()
     else:
-        assert result.error == ("ValueError" if outcome == "execution" else None)
+        assert result.error == ("Error" if outcome == "execution" else None)
         assert result.results == (None if outcome == "execution" else [])
         cursor.close.assert_called_once_with()
         connection.close.assert_called_once_with()
@@ -227,7 +229,11 @@ async def test_sql_tool_keeps_explicit_error_result_and_read_only_driver_inputs(
     plugin, stage, caplog,
 ):
     marker = "synthetic-private-sql-error"
-    failure = asyncio.CancelledError(marker) if stage == "cancelled" else RuntimeError(marker)
+    failure = (
+        asyncio.CancelledError(marker) if stage == "cancelled"
+        else AzureError(marker) if stage == "configuration"
+        else pyodbc.Error(marker)
+    )
     plugin.cosmos.get_document.return_value = {
         "id": "source", "description": "test", "type": "sql_database",
         "server": "db.example.invalid", "database": "test",
@@ -255,7 +261,9 @@ async def test_sql_tool_keeps_explicit_error_result_and_read_only_driver_inputs(
             result = await plugin.execute_sql_query("source", "SELECT 1")
             assert result.model_dump() == (
                 {"results": [{"value": 1}], "error": None}
-                if stage == "success" else {"results": None, "error": "RuntimeError"}
+                if stage == "success" else {
+                    "results": None, "error": "AzureError" if stage == "configuration" else "Error",
+                }
             )
     plugin.cosmos.get_document.assert_awaited_once_with(plugin.container_name, "source")
     if stage not in {"configuration", "connect", "cancelled"}:
@@ -266,6 +274,52 @@ async def test_sql_tool_keeps_explicit_error_result_and_read_only_driver_inputs(
         cursor.execute.assert_not_called()
         cursor.close.assert_not_called()
         connection.close.assert_not_called()
+    assert marker not in caplog.text
+
+
+@pytest.mark.parametrize("bounded", [False, True])
+@pytest.mark.parametrize("stage", ["configuration", "connect", "cursor", "execute", "fetch"])
+@pytest.mark.parametrize("failure_type", [RuntimeError, TypeError])
+async def test_unexpected_sql_failures_propagate_and_release_acquired_resources(
+    plugin, bounded, stage, failure_type, caplog,
+):
+    marker = "synthetic-private-implementation-detail"
+    failure = failure_type(marker)
+    plugin.query_timeout_seconds = 30 if bounded else None
+    plugin.max_rows = 2 if bounded else None
+    plugin.cosmos.get_document.return_value = {
+        "id": "source", "description": "test", "type": "sql_database",
+        "server": "db.example.invalid", "database": "test",
+    }
+    cursor = MagicMock()
+    cursor.description = [("value",)]
+    cursor.fetchall.return_value = [(1,)]
+    cursor.fetchmany.return_value = [(1,)]
+    connection = MagicMock()
+    connection.cursor.return_value = cursor
+    client = SimpleNamespace(create_connection=AsyncMock(return_value=connection))
+    if stage == "configuration":
+        plugin.cosmos.get_document.side_effect = failure
+    elif stage == "connect":
+        client.create_connection.side_effect = failure
+    elif stage == "cursor":
+        connection.cursor.side_effect = failure
+    elif stage == "execute":
+        cursor.execute.side_effect = failure
+    else:
+        (cursor.fetchmany if bounded else cursor.fetchall).side_effect = failure
+    with patch("plugins.nl2sql.plugin.SQLDBClient", return_value=client):
+        with pytest.raises(failure_type) as raised:
+            await plugin.execute_sql_query("source", "SELECT 1")
+    assert raised.value is failure
+    if stage in {"configuration", "connect"}:
+        connection.close.assert_not_called()
+    else:
+        connection.close.assert_called_once_with()
+    if stage in {"execute", "fetch"}:
+        cursor.close.assert_called_once_with()
+    else:
+        cursor.close.assert_not_called()
     assert marker not in caplog.text
 
 

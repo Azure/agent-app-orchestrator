@@ -18,6 +18,7 @@ QUALITY = runpy.run_path(
 # Major-version retirement must make the old approvals unusable, not waive them.
 RETIRED_EXCEPTION_MODULES = {"main", "api.hosted_entrypoint", "orchestration.orchestrator"}
 REPLACED_SQL_RECORD = "nl2sql-sql-result-translation"
+REPLACED_EXCEPTION_RECORDS = {REPLACED_SQL_RECORD, "appconfig-provider-availability-translation"}
 
 
 def tree(tmp_path, files):
@@ -861,7 +862,7 @@ def test_adopted_compatibility_record_is_exact_and_proposals_still_fail(record_i
     assert record["status"] == "active"
     assert record["failure_outcome"] == outcome
     passed = set(record["evidence_tests"])
-    if record["module_id"] in RETIRED_EXCEPTION_MODULES or record_id == REPLACED_SQL_RECORD:
+    if record["module_id"] in RETIRED_EXCEPTION_MODULES or record_id in REPLACED_EXCEPTION_RECORDS:
         assert current == []
         # Neither historical approval nor synthetic passing selectors can
         # authorize a handler that has been removed or structurally replaced.
@@ -917,15 +918,13 @@ def test_initial_adoption_activates_only_existing_records_and_preserves_retireme
     retired_keys = {
         key(record) for record in records
         if record["module_id"] in RETIRED_EXCEPTION_MODULES
-        or record["id"] == REPLACED_SQL_RECORD
+        or record["id"] in REPLACED_EXCEPTION_RECORDS
     }
     assert record_keys - current_keys == retired_keys
     assert {
         (handler["module_id"], handler["symbol"])
         for handler in current if key(handler) not in record_keys
     } == {
-        ("plugins.nl2sql.plugin", "NL2SQLPlugin.execute_sql_query"),
-        ("plugins.nl2sql.plugin", "NL2SQLPlugin._execute_bounded_sql"),
         ("plugins.nl2sql.plugin", "NL2SQLPlugin._bounded_query"),
     }
     # The protected gate still fails closed on both stale approvals and the

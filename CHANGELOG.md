@@ -45,6 +45,12 @@
 - **Native SDK CI dependencies.** Install both pinned host groups in the
   test job so real Hosted and DTS suites execute; runtime images remain separate.
   Protected-base evaluation, required statuses and negative controls are unchanged.
+- **Precise shared failure boundaries.** Preserve typed ODBC/Azure/Pydantic SQL
+  errors and SDK/transport App Configuration availability outcomes, while allowing
+  unexpected implementation failures to propagate. Preserve caller cancellation
+  across competing SQL worker failures without a catch-all translation.
+  Restore isolated Foundry credential evidence for unchanged approved handlers;
+  no classic strategy bootstrap, new exception approval or suppression is added.
 
 ## [v5.3.1] - 2026-10-30
 

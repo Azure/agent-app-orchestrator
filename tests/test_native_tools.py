@@ -99,7 +99,8 @@ async def test_native_query_timeout_row_limit_and_cleanup(registry, rows, error)
     connection.close.assert_called_once()
 
 
-async def test_native_query_cancellation_never_closes_a_running_odbc_handle(registry):
+@pytest.mark.parametrize("worker_outcome", ["success", "driver", "unexpected", "cancelled"])
+async def test_native_query_cancellation_never_closes_a_running_odbc_handle(registry, worker_outcome):
     executing, release = threading.Event(), threading.Event()
     cursor = MagicMock()
     cursor.description = [("value",)]
@@ -109,6 +110,12 @@ async def test_native_query_cancellation_never_closes_a_running_odbc_handle(regi
         executing.set()
         assert release.wait(5), "The test must release its bounded synthetic ODBC operation."
         cursor.close.assert_not_called()
+        if worker_outcome != "success":
+            import pyodbc
+            raise {
+                "driver": pyodbc.Error, "unexpected": RuntimeError,
+                "cancelled": asyncio.CancelledError,
+            }[worker_outcome]("synthetic-private-worker-detail")
 
     cursor.execute.side_effect = execute
     connection = MagicMock()
@@ -123,14 +130,15 @@ async def test_native_query_cancellation_never_closes_a_running_odbc_handle(regi
             ))
             try:
                 assert await asyncio.to_thread(executing.wait, 5)
-                task.cancel()
+                task.cancel("synthetic-caller-cancellation")
                 await asyncio.sleep(0)
                 cursor.close.assert_not_called()
                 connection.close.assert_not_called()
             finally:
                 release.set()
-            with pytest.raises(asyncio.CancelledError):
+            with pytest.raises(asyncio.CancelledError) as raised:
                 await task
+            assert raised.value.args == ("synthetic-caller-cancellation",)
     cursor.close.assert_called_once()
     connection.close.assert_called_once()
 

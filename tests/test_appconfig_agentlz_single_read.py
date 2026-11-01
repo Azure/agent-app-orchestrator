@@ -112,6 +112,25 @@ def test_write_rejects_uninitialized_credentials(monkeypatch, mock_identity_mana
     write_client.assert_not_called()
 
 
+@pytest.mark.parametrize("failure_type", [RuntimeError, TypeError, ValueError])
+def test_unexpected_provider_failures_propagate_without_disabled_success(
+    monkeypatch, mock_identity_manager, failure_type, caplog,
+):
+    marker = "synthetic-private-provider-implementation-detail"
+    failure = failure_type(marker)
+    monkeypatch.setenv("APP_CONFIG_ENDPOINT", "https://config.example.invalid")
+    monkeypatch.setenv("APP_CONFIG_TLS_COMPATIBILITY", "false")
+    with (
+        patch("connectors.appconfig.get_identity_manager", return_value=mock_identity_manager),
+        patch("connectors.appconfig.load", side_effect=failure),
+        pytest.raises(failure_type) as raised,
+    ):
+        AppConfigClient()
+    assert raised.value is failure
+    assert marker not in caplog.text
+    assert "loaded successfully" not in caplog.text
+
+
 @pytest.mark.parametrize("key", ["AGENTLZ_FOO", "GPT_RAG_FOO", "SEARCH_SERVICE_NAME"])
 def test_candidate_keys_is_exact(key):
     assert candidate_keys(key) == [key]

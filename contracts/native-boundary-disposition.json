@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "baseline_runtime_revision": "076d477c5c4ca51490e93fe48287242931c959af",
+  "baseline_ci_run": 41257245133,
+  "status": "Implementation evidence, not protected-policy approval or release readiness",
+  "protected_exception_records_changed": false,
+  "implemented_source_dispositions": [
+    {
+      "symbol": "plugins.nl2sql.plugin.NL2SQLPlugin.execute_sql_query",
+      "change": "Translate actual AzureError, pyodbc.Error and Pydantic ValidationError boundaries; propagate unexpected implementation failures with resource cleanup.",
+      "tests": [
+        "tests/test_nl2sql_plugin_boundaries.py::test_sql_tool_keeps_explicit_error_result_and_read_only_driver_inputs",
+        "tests/test_nl2sql_plugin_boundaries.py::test_unexpected_sql_failures_propagate_and_release_acquired_resources",
+        "tests/test_nl2sql_plugin_boundaries.py::test_sql_acquired_resources_close_without_replacing_outcome",
+        "tests/test_nl2sql_sql_validation.py::test_execute_sql_query_rejects_unsafe_query_before_datasource_access"
+      ],
+      "new_broad_approval": false
+    },
+    {
+      "symbol": "plugins.nl2sql.plugin.NL2SQLPlugin._execute_bounded_sql",
+      "change": "Remove arbitrary exception catch; inspect completed task state and preserve recorded caller cancellation over success, ODBC failure, unexpected failure or worker cancellation.",
+      "test": "tests/test_native_tools.py::test_native_query_cancellation_never_closes_a_running_odbc_handle",
+      "new_broad_approval": false
+    },
+    {
+      "symbol": "connectors.appconfig.AppConfigClient.__init__",
+      "change": "Retain Azure SDK and Requests transport availability handling; propagate unexpected provider implementation failures rather than reporting disabled configuration.",
+      "tests": [
+        "tests/test_appconfig_agentlz_single_read.py::test_transport_profile_preserves_provider_failure_classification",
+        "tests/test_appconfig_agentlz_single_read.py::test_unexpected_provider_failures_propagate_without_disabled_success"
+      ],
+      "new_broad_approval": false
+    }
+  ],
+  "restored_exact_evidence": [
+    {
+      "protected_record": "foundry-service-token-failure",
+      "source_handler_changed": false,
+      "test": "tests/test_foundry_connector_boundaries.py::test_service_token_failure_never_reaches_http",
+      "evidence": "All six exact approved selectors run against the real connector, with SDK/unexpected failure identity, cancellation, no HTTP and bounded diagnostics."
+    },
+    {
+      "protected_record": "foundry-mcp-query-credential-failure",
+      "source_handler_changed": false,
+      "test": "tests/test_foundry_connector_boundaries.py::test_actual_mcp_header_resolution_keeps_credential_failure_boundary",
+      "evidence": "All four exact approved selectors run against actual header resolution, including delegated-token preservation and credential/cancellation distinctions."
+    }
+  ],
+  "remaining_shared_boundary_review": [
+    {
+      "protected_record": "foundry-retrieve-request-failure",
+      "source_handler_changed": false,
+      "current_connector_selectors_restored": 14,
+      "remaining": "Two approved consumer selectors still require the retired classic Hosted adapter. Do not substitute a superficially equivalent native test or re-enable classic execution; formal evidence disposition is required."
+    },
+    {
+      "protected_record": "nl2sql-schema-unavailable-compatibility",
+      "source_handler_changed": false,
+      "remaining": "Direct typed metadata tool failure coverage passes, but approved schema-collector and ordinary-answer selectors require the retired strategy. Exact consumer evidence disposition remains formal review."
+    },
+    {
+      "protected_record": "nl2sql-sql-cleanup-preserves-primary-outcome",
+      "source_handler_changed": false,
+      "remaining": "Direct acquired-resource/primary-result/cancellation coverage passes, but three approved strategy-flow selectors are retired. Formal evidence disposition is required."
+    },
+    {
+      "symbol": "plugins.nl2sql.plugin.NL2SQLPlugin._bounded_query",
+      "remaining": "The catch-all cleanup contract preserves primary query outcomes while attempting both releases. It has no inherited broad approval; exact adoption or a separately verified contract change remains required."
+    }
+  ],
+  "legacy_execution_disposition": {
+    "state": "Already explicitly disabled by retired entrypoints and strategy facade; never required by native bootstrap",
+    "remaining": "Legacy strategy/dashboard handlers and their obsolete evidence are not counted as product-native validation. Their coherent source/surface/coverage retirement needs coordinated contract review; retaining source is not approval and their findings remain failures.",
+    "legacy_execution_reenabled_for_evidence": false
+  },
+  "release_gate_waiver": false,
+  "protected_evaluator_changed": false,
+  "source_manifest_or_candidate_dependency_bypass": false
+}
