@@ -8,6 +8,10 @@
   stateless adapter with MAF Agent conversations and a named human-reviewed graph,
   using official Responses hosting or the standalone Durable Extension with DTS.
   Separate host dependency groups/images and capture scoped functional run settings.
+- **Maintainable quality controls.** Evaluate the reviewed checker, aggregate,
+  contracts, tool pins and dependency groups, retaining base regression guards
+  against new typing debt, lost live-module coverage, widened suppressions,
+  false retirement and invalid failure evidence or same-run reports.
 - **Optional NL2SQL and retrieval tools.** Reuse the datasource catalog,
   read-only query validator and SQL/Fabric adapters without runtime-global Cosmos.
   Expose retrieval/MCP as capabilities, with bounded SQL execution and typed errors.
@@ -26,7 +30,12 @@
   tests independently of the retired HTTP and strategy bootstraps.
   Keep retirement-aware quality negative controls: historical approvals must
   fail for removed/replaced handlers, and changed SQL handlers still require
-  exact protected adoption rather than inheriting legacy allowances.
+  exact current source/failure evidence rather than inheriting legacy allowances.
+- **Physical classic source retirement.** Remove unused strategy execution,
+  dashboard routers, classic turn/compaction adapters and strategy warmup.
+  Preserve shared SQL/Fabric, Search, Foundry IQ, MCP and OBO helpers. Keep
+  original exception history separate from precise current source/evidence
+  records, with dedicated native worker-cleanup proof and no baseline reset.
 
 ### Fixed
 
@@ -42,15 +51,15 @@
   the actual Responses host and published Foundry model serializer. The
   authenticated UI owns optional upload admission; no ingestion or private Blob
   execution adapter is added. Model file/vision support remains a deployment prerequisite.
-- **Native SDK CI dependencies.** Install both pinned host groups in the
-  test job so real Hosted and DTS suites execute; runtime images remain separate.
-  Protected-base evaluation, required statuses and negative controls are unchanged.
+- **Native SDK CI dependencies.** Install both pinned host groups in analysis
+  and test jobs so real SDK shapes and Hosted/DTS suites execute; runtime images
+  remain separate. Required statuses and negative regression controls remain.
 - **Precise shared failure boundaries.** Preserve typed ODBC/Azure/Pydantic SQL
   errors and SDK/transport App Configuration availability outcomes, while allowing
   unexpected implementation failures to propagate. Preserve caller cancellation
   across competing SQL worker failures without a catch-all translation.
   Restore isolated Foundry credential evidence for unchanged approved handlers;
-  no classic strategy bootstrap, new exception approval or suppression is added.
+  no classic strategy bootstrap or suppression is added by those repairs.
 
 ## [v5.3.1] - 2026-10-30
 

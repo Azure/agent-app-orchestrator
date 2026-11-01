@@ -114,7 +114,7 @@
       "translated": ["pyodbc.Error", "azure.core.exceptions.AzureError", "pydantic.ValidationError"],
       "unexpected_implementation_failures": "propagate, with acquired cursor/connection cleanup",
       "cancelled_worker_failures": "recorded caller cancellation remains primary; no catch-all translation",
-      "cleanup_review": "catch-all cleanup preservation still requires exact protected evidence/adoption"
+      "cleanup_review": "distinct current unbounded and bounded worker cleanup records bind actual SQL/Fabric result, failure, resource and cancellation evidence; required current-revision CI decides acceptance"
     },
     "dax_requires_invocation_local_delegation": true,
     "multimodal_function": "multimodal_retrieve",

@@ -1,9 +1,53 @@
 {
   "application_major_version": 6,
   "decision": "Agent Landing Zone ADR-0034",
+  "source_inventory_revision": "b3b884a138fc135ae4808c37c3a3e1b936d5027c",
+  "historical_exception_inventory": "contracts/native-exception-history.json",
+  "historical_inventory_rule": "Byte-equivalent original records remain historical data, never loaded as current allowances. Current exact handlers and failure selectors live in .quality/exceptions.json.",
+  "physically_retired_modules": [
+    "api.config_settings", "api.dashboard", "api.dashboard_config",
+    "api.responses_adapter", "api.turn_sse",
+    "orchestration.agent_events", "orchestration.conversation_compaction", "orchestration.turn",
+    "startup_warmup",
+    "strategies.agent_provider_v2", "strategies.agent_strategies", "strategies.agent_strategy_factory",
+    "strategies.base_agent_strategy", "strategies.composite_context_provider", "strategies.context_shaping",
+    "strategies.foundry_iq_context_provider", "strategies.hosted_strategies", "strategies.intent_utils",
+    "strategies.maf_agent_service_strategy", "strategies.maf_lite_strategy", "strategies.maf_plugins",
+    "strategies.maf_plugins.user_profile_memory", "strategies.mcp_strategy",
+    "strategies.multimodal_search_context_provider", "strategies.multimodal_strategy",
+    "strategies.nl2sql_strategy", "strategies.retrieval_intent", "strategies.search_context_provider",
+    "strategies.single_agent_rag_strategy_v2"
+  ],
+  "retired_exception_ids": [
+    "optional-conversation-lifecycle-diagnostic", "legacy-detached-conversation-persistence",
+    "legacy-conversation-persistence-scheduling-cleanup", "legacy-conversation-persistence-cleanup-diagnostic",
+    "optional-feedback-question-resolution", "agent-provider-pre-output-option-retry",
+    "managed-turn-ambiguous-write-reconciliation", "managed-tail-lookup-unconfirmed",
+    "optional-reusable-agent-prewarm", "legacy-single-search-context-continuation",
+    "single-direct-stream-contextual-propagation", "single-agent-stream-contextual-propagation",
+    "legacy-maf-service-nullable-provider", "legacy-maf-lite-nullable-provider",
+    "maf-lite-intent-question-fallback", "legacy-multimodal-nullable-provider",
+    "multimodal-image-validation-strip", "multimodal-intent-question-fallback",
+    "appconfig-provider-availability-translation", "search-provider-keyword-fallback",
+    "search-provider-empty-context-translation", "turn-error-event-before-propagation",
+    "stream-failed-audit-before-propagation", "nl2sql-sql-result-translation",
+    "dashboard-admin-auth-translation", "dashboard-per-setting-write-isolation",
+    "startup-optional-token-prefetch", "startup-optional-agent-prewarm", "startup-optional-provider-prewarm",
+    "request-debug-rendering-side-effect", "orchestrator-auth-failure-translation",
+    "request-context-logging-side-effect", "history-auth-failure-translation",
+    "foundry-context-empty-result-translation", "multimodal-context-keyword-fallback",
+    "legacy-multimodal-retry-without-obo", "multimodal-optional-image-classification",
+    "multimodal-optional-image-download", "maf-lite-optional-profile-load", "maf-lite-optional-profile-save",
+    "maf-service-optional-profile-load", "maf-service-optional-profile-save",
+    "multimodal-profile-load-compatibility", "multimodal-profile-save-compatibility",
+    "conversation-list-http-failure-translation", "conversation-read-http-failure-translation",
+    "conversation-rename-http-failure-translation", "conversation-delete-http-failure-translation",
+    "hosted-turn-error-before-propagation", "hosted-sse-safe-terminal-error-translation",
+    "mcp-chat-cleanup-preserves-primary-outcome", "sse-safe-terminal-error-translation"
+  ],
   "retired_exception_modules": ["main", "api.hosted_entrypoint", "orchestration.orchestrator"],
   "replaced_sql_exception_record": "nl2sql-sql-result-translation",
-  "exception_adoption_status": "Protected historical approvals remain unusable for retired/replaced handlers; no new approval or baseline waiver.",
+  "exception_adoption_status": "Historical records cannot authorize removed/replaced handlers. Forty unchanged live handlers retain exact records; current typed schema/SQL/Foundry evidence explicitly replaces retired consumers. One distinct bounded worker cleanup record is backed by the actual SQL/Fabric state and caller-cancellation tests. No typing baseline reset or gate waiver.",
   "retired_contracts": [
     "AGENT_STRATEGY and AgentStrategyFactory execution",
     "Classic /orchestrator, /conversations and /api/dashboard",
@@ -18,6 +62,7 @@
     "tests/test_native_hosted.py",
     "tests/test_native_durable.py",
     "tests/test_native_tools.py"
+    ,"tests/test_native_major_retirement.py"
   ],
   "retained_capability_security_tests": [
     "tests/test_nl2sql_sql_validation.py",
@@ -34,5 +79,5 @@
   "retirement_rule": "Remove tests whose execution contract directly imports the retired API, strategy or orchestration packages. Retain connector, SQL, MCP, telemetry and native behavior/security coverage.",
   "state_migration": false,
   "legacy_fallback": false,
-  "release_gate": "Required protected-base quality and complete test checks remain mandatory; this retirement record does not waive any finding."
+  "release_gate": "Required maintained current-revision quality and complete native test checks remain mandatory; this retirement record does not waive any finding."
 }

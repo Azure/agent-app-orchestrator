@@ -355,3 +355,80 @@ async def test_dax_tool_retains_user_token_and_explicit_error_result(plugin, out
             dax_query="EVALUATE table", user_token="synthetic-user-token")
     assert marker not in caplog.text
     assert "synthetic-user-token" not in caplog.text
+
+
+@pytest.mark.parametrize("bounded,datasource_type,client_name,stage,cleanup_fails", [
+    pytest.param(
+        bounded, datasource_type, client_name, stage, cleanup_fails,
+        id=f"{'bounded' if bounded else 'unbounded'}-{name}-{stage}-{'failed-cleanup' if cleanup_fails else 'closed'}",
+    )
+    for bounded in (False, True)
+    for name, datasource_type, client_name in (
+        ("database", "sql_database", "SQLDBClient"),
+        ("endpoint", "sql_endpoint", "SQLEndpointClient"),
+    )
+    for stage in ("cursor", "execute", "fetch", "unexpected", "cancelled", "rows", "success", "empty")
+    for cleanup_fails in (False, True)
+    if bounded or stage != "rows"
+])
+async def test_native_sql_cleanup_keeps_primary_state(
+    plugin, bounded, datasource_type, client_name, stage, cleanup_fails, caplog,
+):
+    marker = "synthetic-private-cleanup-failure"
+    plugin.query_timeout_seconds = 30 if bounded else None
+    plugin.max_rows = 2 if bounded else None
+    plugin.cosmos.get_document.return_value = {
+        "id": "source", "description": "test", "type": datasource_type,
+        "server": "db.example.invalid", "database": "test",
+        "organization": "test", "tenant_id": "tenant", "client_id": "client",
+    }
+    cursor, connection = MagicMock(), MagicMock()
+    connection.cursor.return_value = cursor
+    cursor.description = [("value",)]
+    rows = [] if stage == "empty" else [(1,), (2,), (3,)] if stage == "rows" else [(1,)]
+    cursor.fetchmany.return_value = cursor.fetchall.return_value = rows
+    failure = (
+        asyncio.CancelledError(marker) if stage == "cancelled"
+        else RuntimeError(marker) if stage == "unexpected"
+        else pyodbc.Error(marker)
+    )
+    if stage == "cursor":
+        connection.cursor.side_effect = failure
+    elif stage in {"execute", "unexpected", "cancelled"}:
+        cursor.execute.side_effect = failure
+    elif stage == "fetch":
+        (cursor.fetchmany if bounded else cursor.fetchall).side_effect = failure
+    if cleanup_fails:
+        cursor.close.side_effect = RuntimeError(marker)
+        connection.close.side_effect = RuntimeError(marker)
+    releases = MagicMock()
+    releases.attach_mock(cursor.close, "cursor")
+    releases.attach_mock(connection.close, "connection")
+    client = SimpleNamespace(create_connection=AsyncMock(return_value=connection))
+    with patch(f"plugins.nl2sql.plugin.{client_name}", return_value=client):
+        if stage in {"unexpected", "cancelled"}:
+            with pytest.raises(type(failure)) as raised:
+                await plugin.execute_sql_query("source", "SELECT 1")
+            # asyncio.shield reports worker-task cancellation as its own
+            # CancelledError. Caller-cancellation identity is independently
+            # proved by test_native_query_cancellation_never_closes_a_running_odbc_handle.
+            if not (bounded and stage == "cancelled"):
+                assert raised.value is failure
+        else:
+            result = await plugin.execute_sql_query("source", "SELECT 1")
+            assert result.model_dump() == (
+                {"results": None, "error": "Error"} if stage in {"cursor", "execute", "fetch"}
+                else {"results": None, "error": "Query exceeded the configured row limit."} if stage == "rows"
+                else {"results": [] if stage == "empty" else [{"value": 1}], "error": None}
+            )
+    assert releases.mock_calls == (
+        [call.connection()] if stage == "cursor" else [call.cursor(), call.connection()]
+    )
+    if stage != "cursor":
+        cursor.execute.assert_called_once_with("SELECT 1")
+    if bounded:
+        assert connection.timeout == 30
+        cursor.fetchall.assert_not_called()
+        if stage not in {"cursor", "execute", "unexpected", "cancelled"}:
+            cursor.fetchmany.assert_called_once_with(3)
+    assert marker not in caplog.text

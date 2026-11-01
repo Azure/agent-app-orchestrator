@@ -2,7 +2,7 @@
   "schema_version": 1,
   "baseline_runtime_revision": "076d477c5c4ca51490e93fe48287242931c959af",
   "baseline_ci_run": 41257245133,
-  "status": "Implementation evidence, not protected-policy approval or release readiness",
+  "status": "Historical b3 bounded-repair evidence; superseded by maintained current-revision checks and contracts/native-major-retirement.json. Final native CI, not this record, decides acceptance.",
   "protected_exception_records_changed": false,
   "implemented_source_dispositions": [
     {
@@ -51,26 +51,26 @@
       "protected_record": "foundry-retrieve-request-failure",
       "source_handler_changed": false,
       "current_connector_selectors_restored": 14,
-      "remaining": "Two approved consumer selectors still require the retired classic Hosted adapter. Do not substitute a superficially equivalent native test or re-enable classic execution; formal evidence disposition is required."
+      "remaining": "Resolved under current-revision evidence maintenance: fourteen actual connector selectors retained; two classic Hosted consumer selectors explicitly retired, never renamed or re-enabled."
     },
     {
       "protected_record": "nl2sql-schema-unavailable-compatibility",
       "source_handler_changed": false,
-      "remaining": "Direct typed metadata tool failure coverage passes, but approved schema-collector and ordinary-answer selectors require the retired strategy. Exact consumer evidence disposition remains formal review."
+      "remaining": "Resolved under current-revision evidence maintenance: six actual typed schema outcomes distinguish missing/provider/malformed/empty/success/cancellation; retired strategy selectors are not impersonated."
     },
     {
       "protected_record": "nl2sql-sql-cleanup-preserves-primary-outcome",
       "source_handler_changed": false,
-      "remaining": "Direct acquired-resource/primary-result/cancellation coverage passes, but three approved strategy-flow selectors are retired. Formal evidence disposition is required."
+      "remaining": "Resolved under current-revision evidence maintenance: original direct cleanup selectors retained and actual unexpected/cursor-failure cleanup states added; three classic strategy-flow selectors explicitly retired."
     },
     {
       "symbol": "plugins.nl2sql.plugin.NL2SQLPlugin._bounded_query",
-      "remaining": "The catch-all cleanup contract preserves primary query outcomes while attempting both releases. It has no inherited broad approval; exact adoption or a separately verified contract change remains required."
+      "remaining": "Distinct exact native-bounded-sql-cleanup record now binds worker-owned release behavior, actual SQL/Fabric state matrix and independently tested caller cancellation; no approval inherited from the unbounded symbol."
     }
   ],
   "legacy_execution_disposition": {
     "state": "Already explicitly disabled by retired entrypoints and strategy facade; never required by native bootstrap",
-    "remaining": "Legacy strategy/dashboard handlers and their obsolete evidence are not counted as product-native validation. Their coherent source/surface/coverage retirement needs coordinated contract review; retaining source is not approval and their findings remain failures.",
+    "remaining": "Twenty-nine unused strategy/dashboard/turn/warmup source modules physically removed with matching surface inventory. Original exception records retained as historical data, never current allowances. Shared capability/security helpers and tests retained.",
     "legacy_execution_reenabled_for_evidence": false
   },
   "release_gate_waiver": false,

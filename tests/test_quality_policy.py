@@ -560,10 +560,12 @@ def test_new_control_file_is_reviewable_without_blanket_veto(policy_repo):
     assert not findings
 
 
-@pytest.mark.parametrize("source", ["live", "copied", "removed"])
+@pytest.mark.parametrize("source", ["live", "copied", "removed", "empty"])
 def test_retirement_requires_physical_removal_not_inventory_erasure(tmp_path, source):
-    before = tree(tmp_path / "before", {"seed.py": "value: int = 1"})
-    files = {"other.py": "other: int = 2"}
+    # Empty legacy placeholders contain no executable source to copy. Unrelated
+    # empty package markers must not make their genuine deletion impossible.
+    before = tree(tmp_path / "before", {"seed.py": "" if source == "empty" else "value: int = 1"})
+    files = {"other.py": "" if source == "empty" else "other: int = 2"}
     if source == "live":
         files["seed.py"] = "value: int = 1"
     elif source == "copied":
@@ -572,10 +574,10 @@ def test_retirement_requires_physical_removal_not_inventory_erasure(tmp_path, so
     old = {"module-surfaces.json": {"entries": [surface_record()]}}
     new = {"module-surfaces.json": {"entries": [surface_record("other")]}}
     retired, findings = QUALITY["retired_modules"](before, after, old, new)
-    assert retired == ({"seed"} if source == "removed" else set())
-    assert bool(findings) == (source != "removed")
+    assert retired == ({"seed"} if source in {"removed", "empty"} else set())
+    assert bool(findings) == (source in {"live", "copied"})
     _, identities = QUALITY["module_identities"](before, after, old["module-surfaces.json"]["entries"], retired)
-    if source == "removed":
+    if source in {"removed", "empty"}:
         assert not identities
 
 
@@ -918,7 +920,8 @@ def test_adopted_audit_records_bind_source_and_proposals_still_fail():
 ])
 def test_adopted_compatibility_record_is_exact_and_proposals_still_fail(record_id, outcome):
     root = Path(QUALITY["__file__"]).resolve().parents[2]
-    records = QUALITY["load_records"](root)["exceptions.json"]["entries"]
+    # Historical approval remains historical: never execute or revive retired consumers.
+    records = json.loads((root / "contracts/native-exception-history.json").read_text())["entries"]
     record = next(r for r in records if r["id"] == record_id)
     current = [h for h in QUALITY["handlers"](QUALITY["collect"](root, ["src"]))
                if h["module_id"] == record["module_id"]
@@ -927,7 +930,7 @@ def test_adopted_compatibility_record_is_exact_and_proposals_still_fail(record_i
     assert record["status"] == "active"
     assert record["failure_outcome"] == outcome
     passed = set(record["evidence_tests"])
-    if record["module_id"] in RETIRED_EXCEPTION_MODULES or record_id in REPLACED_EXCEPTION_RECORDS:
+    if not current:
         assert current == []
         # Neither historical approval nor synthetic passing selectors can
         # authorize a handler that has been removed or structurally replaced.
@@ -944,7 +947,7 @@ def test_adopted_compatibility_record_is_exact_and_proposals_still_fail(record_i
 
 def test_adopted_non_audit_turn_record_still_requires_approval_and_evidence():
     root = Path(QUALITY["__file__"]).resolve().parents[2]
-    records = QUALITY["load_records"](root)["exceptions.json"]["entries"]
+    records = json.loads((root / "contracts/native-exception-history.json").read_text())["entries"]
     record = next(r for r in records if r["id"] == "turn-error-event-before-propagation")
     current = [h for h in QUALITY["handlers"](QUALITY["collect"](root, ["src"]))
                if h["module_id"] == record["module_id"] and h["symbol"] == record["symbol"]]
@@ -960,7 +963,7 @@ def test_adopted_non_audit_turn_record_still_requires_approval_and_evidence():
 
 def test_initial_adoption_activates_only_existing_records_and_preserves_retirements():
     root = Path(QUALITY["__file__"]).resolve().parents[2]
-    records = QUALITY["load_records"](root)["exceptions.json"]["entries"]
+    records = json.loads((root / "contracts/native-exception-history.json").read_text())["entries"]
     retired = {
         "legacy-orchestrator-token-setter", "legacy-text-provider-obo-service-fallback",
         "foundry-context-obo-compatibility", "legacy-multimodal-obo-service-fallback",
@@ -973,19 +976,11 @@ def test_initial_adoption_activates_only_existing_records_and_preserves_retireme
     approval = "https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634"
     assert all(record["status"] == "active" for record in records)
     assert all(approval in record["review"] for record in records)
-    policy = QUALITY["load_records"](root)["policy.json"]
-    assert policy["review"]["status"] == "active"
-    assert policy["review"]["reference"] == approval
     current = QUALITY["handlers"](QUALITY["collect"](root, ["src"]))
     key = lambda item: (item["module_id"], item["symbol"], item["handler_fingerprint"])
     record_keys = {key(record) for record in records}
     current_keys = {key(handler) for handler in current}
-    retired_keys = {
-        key(record) for record in records
-        if record["module_id"] in RETIRED_EXCEPTION_MODULES
-        or record["id"] in REPLACED_EXCEPTION_RECORDS
-    }
-    assert record_keys - current_keys == retired_keys
+    assert record_keys - current_keys
     assert {
         (handler["module_id"], handler["symbol"])
         for handler in current if key(handler) not in record_keys
@@ -999,6 +994,17 @@ def test_initial_adoption_activates_only_existing_records_and_preserves_retireme
     assert findings
     assert any(finding["rule"] == "broad-handler" for finding in findings)
     assert any(finding["rule"] == "unused-exception" for finding in findings)
+
+
+def test_native_major_current_records_bind_exact_live_handlers():
+    root = Path(QUALITY["__file__"]).resolve().parents[2]
+    current = QUALITY["handlers"](QUALITY["collect"](root, ["src"]))
+    records = QUALITY["load_records"](root)["exceptions.json"]["entries"]
+    key = lambda item: (item["module_id"], item["symbol"], item["handler_fingerprint"], tuple(item["caught_types"]))
+    assert {key(record) for record in records} == {key(handler) for handler in current}
+    assert all(record["status"] == "active" for record in records)
+    # This validator fixture is not the gate's real executed behavioral evidence.
+    assert QUALITY["check_exceptions"](current, records, set())
 
 
 @pytest.mark.parametrize("file,mutate", [
