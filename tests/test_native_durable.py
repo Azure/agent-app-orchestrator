@@ -82,6 +82,9 @@ def test_worker_entrypoint_honors_explicit_identity_with_real_sdk_constructor(mo
 
     def scheduler_worker(**options):
         worker_credentials.append(options["token_credential"])
+        assert set(options) == {"host_address", "taskhub", "token_credential", "secure_channel"}
+        assert options["host_address"] == "https://scheduler.example.invalid"
+        assert options["taskhub"] == "synthetic"
         assert options["secure_channel"] is True
         # The published constructor is unchanged; the transport starts only on start().
         return DurableTaskSchedulerWorker(**options)

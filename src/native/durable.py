@@ -88,7 +88,8 @@ def main() -> None:
             asyncio.run(config.open())
             configure_worker_telemetry(asyncio.run(config.view()))
             runtime = build_worker(config, DurableTaskSchedulerWorker(
-                **binding, token_credential=scheduler_credential, secure_channel=True,
+                host_address=binding["host_address"], taskhub=binding["taskhub"],
+                token_credential=scheduler_credential, secure_channel=True,
             ))
             runtime.start()
             stopped.wait()
