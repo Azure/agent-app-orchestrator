@@ -67,5 +67,5 @@ show_error_codes = true
 follow_imports = "normal"
 
 [[tool.mypy.overrides]]
-module = ["schemas", "connectors.types", "connectors.obo", "plugins.retrieval.retrieval_types", "plugins.nl2sql.nl2sql_types"]
+module = ["schemas", "connectors.obo", "plugins.retrieval.retrieval_types"]
 disallow_untyped_defs = true
