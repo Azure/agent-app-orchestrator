@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 import aiohttp
 from azure.core.exceptions import AzureError
-from agent_framework import ai_function
+from agent_framework import tool
 from connectors.identity_manager import get_identity_manager
 from dependencies import get_config
 from connectors.aifoundry import get_genai_client
@@ -19,9 +19,9 @@ from .retrieval_types import (
 )
 
 class RetrievalPlugin:
-    def __init__(self):
-        cfg = get_config()
-        self.aoai = get_genai_client()
+    def __init__(self, *, config=None, model=None):
+        cfg = config if config is not None else get_config()
+        self.aoai = model if model is not None else get_genai_client()
         self.search_top_k = int(cfg.get('SEARCH_RAGINDEX_TOP_K', 3))
         self.search_approach = cfg.get('SEARCH_APPROACH', 'hybrid')
         self.semantic_search_config = cfg.get('SEARCH_SEMANTIC_SEARCH_CONFIG', 'my-semantic-config')
@@ -49,7 +49,7 @@ class RetrievalPlugin:
                 logging.error("Error during asynchronous HTTP request (%s).", type(e).__name__)
                 raise Exception("Failed to execute search query.") from e
 
-    @ai_function(
+    @tool(
         name="VectorIndexRetrieve",
         description="Performs a vector search against Azure Cognitive Search and returns the results as a string."
     )
@@ -135,7 +135,7 @@ class RetrievalPlugin:
             content = content.replace(image_path, image_url)
         return content
 
-    @ai_function(
+    @tool(
         name="MultimodalVectorIndexRetrieve",
         description="Performs a multimodal vector search and returns texts, images, and captions."
     )
@@ -239,7 +239,7 @@ class RetrievalPlugin:
             error=error_message
         )
 
-    @ai_function(
+    @tool(
         name="GetDataPointsFromChatLog",
         description="Extracts data points (e.g., filenames) from a chat log."
     )

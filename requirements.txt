@@ -1,59 +1,6 @@
-# Azure SDK dependencies
-azure-keyvault-secrets==4.11.2
-azure-cosmos==4.5.1
+# Shared native definition/configuration dependencies, no host SDK or state backend.
+agent-framework-core==1.24.0
+agent-framework-foundry==1.16.0
 azure-identity==1.25.3
-azure-mgmt-web==11.0.1
-azure-mgmt-storage==25.1.0
-azure-storage-blob==12.25.1
-azure-appconfiguration==1.7.1
-azure.appconfiguration.provider
-azure-ai-projects==2.0.0b3
-azure-ai-agents>=1.2.0b4
-azure-ai-agentserver-responses==2.0.0b1
-azure-ai-agentserver-core==2.2.0
-azure-search-documents==11.7.0b2
-
-# AI and NLP dependencies
-tiktoken==0.14.0
-regex>=2022.1.18
-openai==3.24.0
-
-# Async and data dependencies
-aiohttp==3.14.4
-pydantic==2.13.5
-
-# Authentication and token validation
-PyJWT==2.15.0
-cryptography>=50.0.1
-httpx>=0.28.1
-
-# Microsoft Agent Framework (MAF) dependencies
-agent-framework-core==1.0.0b260116
-agent-framework-azure-ai==1.0.0b260116
-agent-framework-azure-ai-search==1.0.0b260116
-opentelemetry-semantic-conventions-ai>=0.4.13,<0.5.0
-mcp>=1.25.0
-
-# Utility dependencies
-tenacity
-jinja2==3.1.6
-
-# Character detection (pin to <6 for requests compatibility)
-chardet>=7.6.0,<8.0.0
-
-# For evaluation
-requests==2.34.2
-python-dotenv==1.2.2
-
-# fastapi
-fastapi==0.115.12
-uvicorn==0.49.0
-
-# NL2SQL dependencies
-sqlparse==0.6.0
-pyodbc==5.3.0
-#opentelemetry
-azure-monitor-opentelemetry==1.8.9
-azure-monitor-opentelemetry-exporter==1.0.0b56
-opentelemetry-instrumentation-httpx==0.64b0
-opentelemetry-instrumentation-fastapi==0.64b0
+azure-appconfiguration-provider==2.3.1
+azure-monitor-opentelemetry==1.8.11

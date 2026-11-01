@@ -1,9 +1,3 @@
-from .agent_strategy_factory        import AgentStrategyFactory
-from .agent_strategies                     import AgentStrategies
-from .multimodal_strategy            import MultimodalStrategy
+"""Classic strategy composition is retired under ADR-0034."""
 
-__all__ = [
-    "AgentStrategyFactory",
-    "AgentStrategies",
-    "MultimodalStrategy",
-]
+raise RuntimeError("Mixed strategy execution is retired; use native.hosted or native.durable.")

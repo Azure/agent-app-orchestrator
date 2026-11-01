@@ -12,7 +12,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.connection import HTTPConnection
 from azure.core.credentials import TokenCredential
 from azure.core.credentials_async import AsyncTokenCredential
-from azure.core.exceptions import ClientAuthenticationError
+from azure.core.exceptions import AzureError, ClientAuthenticationError
 from azure.core.pipeline.transport import RequestsTransport
 from azure.appconfiguration import (
     AzureAppConfigurationClient,
@@ -213,7 +213,8 @@ class AppConfigClient:
             ",".join(loaded_labels),
         )
 
-        # Try to load from Azure App Configuration. If auth fails, don't spam stack traces.
+        # SDK/transport availability failures retain the disabled result. Errors
+        # in provider callbacks or configuration processing propagate unchanged.
         try:
             self.client = load(
                 selects=[legacy_orchestrator_label_selector, orchestrator_label_selector, base_label_selector, no_label_selector],
@@ -234,7 +235,7 @@ class AppConfigClient:
             self.disabled = True
             self.auth_failed = True
             self.client = {}
-        except Exception as e:
+        except (AzureError, requests.RequestException) as e:
             # Any other error: disable and keep running without remote config.
             logging.warning(
                 "Azure App Configuration unavailable (%s). Skipping remote configuration and not fetching any keys.",

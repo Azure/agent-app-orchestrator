@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from typing import Any, Literal
 from urllib.parse import urlsplit, urlunsplit
 
-import httpx
+import httpx2 as httpx
 from agent_framework import MCPStreamableHTTPTool
 from agent_framework._mcp import MCPTool
 from mcp.client.sse import sse_client
@@ -220,6 +220,7 @@ async def open_mcp_tool(
             request_timeout=timeout,
             load_prompts=False,
             http_client=http_client,
+            tool_result_content="content_only",
         )
         async with tool:
             yield tool

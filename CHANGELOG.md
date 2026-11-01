@@ -1,5 +1,120 @@
 # Changelog
 
+## [v6.0.0] - 2026-11-01
+
+### Changed
+
+- **Native execution and explicit hosts.** Replace the classic service and
+  stateless adapter with MAF Agent conversations and a named human-reviewed graph,
+  using official Responses hosting or the standalone Durable Extension with DTS.
+  Separate host dependency groups/images and capture scoped functional run settings.
+- **Canonical public selection.** Use only `ORCHESTRATION_HOST` with
+  `hosted` or `container_apps`, and `APPLICATION_MODE` with `conversational`,
+  `workflow` or `both`. Hosted requires one mode per publication; `both`
+  uses separate Hosted publications. Entry points are `native.hosted` and
+  `native.durable`; no classic or hosted-panel selection is exposed.
+- **Maintainable quality controls.** Evaluate the reviewed checker, aggregate,
+  contracts, tool pins and dependency groups, retaining base regression guards
+  against new typing debt, lost live-module coverage, widened suppressions,
+  false retirement and invalid failure evidence or same-run reports.
+- **Optional NL2SQL and retrieval tools.** Reuse the datasource catalog,
+  read-only query validator and SQL/Fabric adapters without runtime-global Cosmos.
+  Expose retrieval/MCP as capabilities, with bounded SQL execution and typed errors.
+
+### Removed
+
+- **Mixed strategies and classic runtime APIs.** Retire AGENT_STRATEGY,
+  /orchestrator, /conversations and /api/dashboard execution. Adoption requires a
+  coordinated component major; rollback retains the prior deployment and its data.
+  No conversation/checkpoint migration or runtime provisioning is introduced.
+- **Obsolete execution tests.** Retire tests bound directly to the removed
+  classic API, strategy and orchestration contracts. Record the major-version
+  replacement and retained tool/security coverage in
+  `contracts/native-major-retirement.json`; no test skip or guardrail waiver is added.
+  Preserve shared connector fixtures and Search/Cosmos failure and permission
+  tests independently of the retired HTTP and strategy bootstraps.
+  Keep retirement-aware quality negative controls: historical approvals must
+  fail for removed/replaced handlers, and changed SQL handlers still require
+  exact current source/failure evidence rather than inheriting legacy allowances.
+- **Physical classic source retirement.** Remove unused strategy execution,
+  dashboard routers, classic turn/compaction adapters and strategy warmup.
+  Preserve shared SQL/Fabric, Search, Foundry IQ, MCP and OBO helpers. Keep
+  original exception history separate from precise current source/evidence
+  records, with dedicated native worker-cleanup proof and no baseline reset.
+
+### Fixed
+
+- **Managed-identity DTS binding.** Align the worker with the platform/UI
+  `Authentication=ManagedIdentity` contract and pass an explicit
+  `ManagedIdentityCredential` to DTS. `AZURE_CLIENT_ID` selects a user-assigned
+  identity. An explicit `Authentication=DefaultAzure` remains a separate local
+  worker option, never a deployed UI binding or automatic fallback.
+- **First-release native registrations.** Use `agent-lz-conversation` and
+  `agent-lz-research-review` consistently with the platform naming contract.
+  No previously released native sessions or checkpoints need migration.
+- **Native inline attachment contract.** Verify TXT/MD, PDF and PNG/JPEG through
+  the actual Responses host and published Foundry model serializer. The
+  authenticated UI owns optional upload admission; no ingestion or private Blob
+  execution adapter is added. Model file/vision support remains a deployment prerequisite.
+- **Native SDK CI dependencies.** Install both pinned host groups in analysis
+  and test jobs so real SDK shapes and Hosted/DTS suites execute; runtime images
+  remain separate. Required statuses and negative regression controls remain.
+- **Precise shared failure boundaries.** Preserve typed ODBC/Azure/Pydantic SQL
+  errors and SDK/transport App Configuration availability outcomes, while allowing
+  unexpected implementation failures to propagate. Preserve caller cancellation
+  across competing SQL worker failures without a catch-all translation.
+  Restore isolated Foundry credential evidence for unchanged approved handlers;
+  no classic strategy bootstrap or suppression is added by those repairs.
+
+### Migration and recovery
+
+- **Coordinated major adoption.** Adopt compatible platform configuration,
+  UI/BFF, native orchestrator and central documentation together; do not route
+  classic clients to the new execution contracts. The UI/BFF owns product
+  authentication, history, feedback and attachment admission. Preserve the
+  native typed topic/start, approve-or-reject/comment and structured result
+  contracts and the exact four-DTO Hosted checkpoint allowlist. Hosted
+  human-reviewed workflows require native stored history (`store=true`).
+- **Isolated native state.** Use a new isolated-v2 DTS task hub without
+  processing legacy entities. There is no classic fallback or conversation,
+  checkpoint, profile-memory or task-hub migration engine. Preserve the
+  previous compatible deployment, complete component pins, configuration,
+  immutable image digests and its own data as the rollback boundary.
+- **Attachment and tool prerequisites.** Authenticated conversational uploads
+  require a prompt and permit at most three files, 65,536 bytes per file and
+  262,144 serialized bytes per turn; file-only and workflow attachments are
+  unsupported. Actual file/vision-capable models, resources, identity/RBAC and
+  optional-tool permissions remain deployment prerequisites, not runtime
+  provisioning. Delegated DAX/multimodal adapters remain at the invocation
+  identity seam; the native hosts do not yet supply their delegated tokens,
+  so those paths fail closed.
+- **Source-only publication and recovery.** The release describes source
+  adoption, not a package, image or deployment publication. Previous source
+  release `v5.3.1` points to `56edbebadb1d93636af0906ead8803b6d2af5574`;
+  this is not necessarily the previous deployed platform pin. Recover by
+  routing to the prior compatible deployment/UI and its original state,
+  never by pointing classic code at native checkpoints. Preserve immutable
+  public tags and prefer a reviewed forward corrective release.
+
+### Validation
+
+- Native feature PR427 passed its actual tests, frontend build, five quality
+  checks and quality-gate in run `41313312179` at
+  `26a519ade029870a9eae8a1ebc098a93d8a32b2a`, then normally squash-merged
+  into develop as `46d2486d394ed7227c442d9beac09688e12db85c`.
+  This source evidence is not a substitute for the release PR's main-target
+  checks or the coordinated platform's exact component-combination validation.
+- Release validation uses the maintained pytest suite, frontend build and
+  reviewed-revision quality checks with the actual main base, retaining
+  repository/base/head/run-bound reports and source-retirement provenance.
+- Preserve main's documentation-centralization history
+  `287a7f8ff75333178362c0c264e93d6972fe0037` and the central product,
+  operator and developer documentation ownership in Azure/AI-Landing-Zones.
+- No Azure deployment, live model file/vision understanding, deployed
+  durability, live user/source isolation, private-network, complete remote
+  audit-pipeline or full Azure infrastructure-parity proof is claimed.
+  Frontend build is not a native-image build; no local Docker engine is used.
+
 ## [v5.3.1] - 2026-10-30
 
 ### Changed

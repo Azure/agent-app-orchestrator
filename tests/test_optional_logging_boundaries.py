@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from telemetry.telemetry import Telemetry
-from test_http_boundary_dispositions import actual_config, _retry_failure
+from boundary_fixtures import actual_config, _retry_failure
 
 
 @pytest.mark.parametrize("mode", ["environment", "configured", "missing", "retry", "provider-error", "logging-error", "cancelled"])

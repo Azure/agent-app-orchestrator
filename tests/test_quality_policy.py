@@ -15,6 +15,11 @@ QUALITY = runpy.run_path(
     str(Path(__file__).resolve().parents[1] / ".github/scripts/check-quality.py")
 )
 
+# Major-version retirement must make the old approvals unusable, not waive them.
+RETIRED_EXCEPTION_MODULES = {"main", "api.hosted_entrypoint", "orchestration.orchestrator"}
+REPLACED_SQL_RECORD = "nl2sql-sql-result-translation"
+REPLACED_EXCEPTION_RECORDS = {REPLACED_SQL_RECORD, "appconfig-provider-availability-translation"}
+
 
 def tree(tmp_path, files):
     for name, text in files.items():
@@ -513,19 +518,28 @@ def policy_repo(tmp_path):
     (".github/workflows/pr_pipeline.yaml", "jobs: {}\n"),
     ("tests/test_quality_policy.py", "# no quality tests\n"),
     (".github/CODEOWNERS", "# no owners"),
-    (".quality/typing-scope.json", '{"module_ids": ["a"], "schema_version": 1}'),
-    (".quality/typing-baseline.json",
-     '{"entries": [{"id": "old"}, {"id": "new"}], "schema_version": 1}'),
     (".quality/module-surfaces.json", '{"entries": [], "schema_version": 1}'),
 ])
-def test_candidate_cannot_bless_checker_baseline_owner_or_scope_weakening(policy_repo, path, text):
+def test_legitimate_control_maintenance_has_no_self_amendment_veto(policy_repo, path, text):
     root, base, records = policy_repo
     (root / path).write_text(text)
     candidate = json.loads(json.dumps(records))
     if path.startswith(".quality"):
         candidate[Path(path).name] = json.loads(text)
     findings = QUALITY["policy_changes"](root, base, records, candidate)
-    assert [item["rule"] for item in findings] == ["protected-policy"]
+    assert not findings
+
+
+@pytest.mark.parametrize("name,value,rule", [
+    ("typing-scope.json", {"module_ids": ["a"], "schema_version": 1}, "typing-scope"),
+    ("typing-baseline.json", {"entries": [{"id": "old"}, {"id": "new"}], "schema_version": 1}, "baseline-inflation"),
+    ("typing-baseline.json", {"entries": [{"id": "old", "occurrences": 100}], "schema_version": 1}, "baseline-inflation"),
+])
+def test_maintenance_cannot_reset_debt_or_erase_covered_source(policy_repo, name, value, rule):
+    root, base, records = policy_repo
+    candidate = json.loads(json.dumps(records))
+    candidate[name] = value
+    assert {f["rule"] for f in QUALITY["policy_changes"](root, base, records, candidate)} == {rule}
 
 
 def test_monotonic_scope_expansion_and_debt_retirement_are_allowed(policy_repo):
@@ -538,12 +552,70 @@ def test_monotonic_scope_expansion_and_debt_retirement_are_allowed(policy_repo):
     assert not QUALITY["policy_changes"](root, base, records, candidate)
 
 
-def test_untracked_policy_file_cannot_avoid_integrity_guard(policy_repo):
+def test_new_control_file_is_reviewable_without_blanket_veto(policy_repo):
     root, base, records = policy_repo
     path = root / ".github/scripts/new-policy.py"
     path.write_text("# candidate-owned evaluator\n")
     findings = QUALITY["policy_changes"](root, base, records, records)
-    assert [f["path"] for f in findings] == [".github/scripts/new-policy.py"]
+    assert not findings
+
+
+@pytest.mark.parametrize("source", ["live", "copied", "removed", "empty"])
+def test_retirement_requires_physical_removal_not_inventory_erasure(tmp_path, source):
+    # Empty legacy placeholders contain no executable source to copy. Unrelated
+    # empty package markers must not make their genuine deletion impossible.
+    before = tree(tmp_path / "before", {"seed.py": "" if source == "empty" else "value: int = 1"})
+    files = {"other.py": "" if source == "empty" else "other: int = 2"}
+    if source == "live":
+        files["seed.py"] = "value: int = 1"
+    elif source == "copied":
+        files["renamed.py"] = "value: int = 1"
+    after = tree(tmp_path / "after", files)
+    old = {"module-surfaces.json": {"entries": [surface_record()]}}
+    new = {"module-surfaces.json": {"entries": [surface_record("other")]}}
+    retired, findings = QUALITY["retired_modules"](before, after, old, new)
+    assert retired == ({"seed"} if source in {"removed", "empty"} else set())
+    assert bool(findings) == (source in {"live", "copied"})
+    _, identities = QUALITY["module_identities"](before, after, old["module-surfaces.json"]["entries"], retired)
+    if source in {"removed", "empty"}:
+        assert not identities
+
+
+def test_only_verified_retirement_can_remove_blocking_scope(policy_repo):
+    root, base, records = policy_repo
+    candidate = json.loads(json.dumps(records))
+    candidate["typing-scope.json"]["module_ids"] = ["a"]
+    assert QUALITY["policy_changes"](root, base, records, candidate)
+    assert not QUALITY["policy_changes"](root, base, records, candidate, {"b"})
+
+
+@pytest.mark.parametrize("mutation,rule", [
+    (lambda config: config["tool"]["ruff"]["lint"].update(select=["F821"]), "lint-scope"),
+    (lambda config: config["tool"]["ruff"]["lint"].update(ignore=["F822"]), "suppression"),
+    (lambda config: config["tool"]["mypy"].update(check_untyped_defs=False), "typing-scope"),
+    (lambda config: config["tool"]["mypy"].update(ignore_errors=True), "suppression"),
+    (lambda config: config["tool"]["mypy"].update(follow_imports="skip"), "typing-scope"),
+    (lambda config: config["tool"]["mypy"].update(overrides=[]), "typing-scope"),
+    (lambda config: config["tool"]["mypy"]["overrides"].append({"module": ["*"], "ignore_errors": True}), "suppression"),
+    (lambda config: config["tool"]["mypy"]["overrides"].append({"module": ["*"], "check_untyped_defs": False}), "typing-scope"),
+    (lambda config: config["tool"]["ruff"].update({"force-exclude": True}), "suppression"),
+])
+def test_reviewed_configuration_cannot_weaken_checks_or_widen_suppression(mutation, rule):
+    old = {"tool": {
+        "ruff": {"lint": {"select": ["F821", "F822"]}},
+        "mypy": {"check_untyped_defs": True, "overrides": [{"module": ["seed"], "disallow_untyped_defs": True}]},
+    }}
+    new = json.loads(json.dumps(old))
+    mutation(new)
+    assert rule in {f["rule"] for f in QUALITY["configuration_changes"](old, new)}
+
+
+def test_tool_config_expansion_is_maintainable_without_self_lock():
+    old = {"tool": {"ruff": {"lint": {"select": ["F821"]}}, "mypy": {"check_untyped_defs": True}}}
+    new = json.loads(json.dumps(old))
+    new["tool"]["ruff"]["lint"]["select"].append("F822")
+    new["tool"]["mypy"]["warn_unused_ignores"] = True
+    assert not QUALITY["configuration_changes"](old, new)
 
 
 @pytest.mark.parametrize("path", [
@@ -848,16 +920,25 @@ def test_adopted_audit_records_bind_source_and_proposals_still_fail():
 ])
 def test_adopted_compatibility_record_is_exact_and_proposals_still_fail(record_id, outcome):
     root = Path(QUALITY["__file__"]).resolve().parents[2]
-    records = QUALITY["load_records"](root)["exceptions.json"]["entries"]
+    # Historical approval remains historical: never execute or revive retired consumers.
+    records = json.loads((root / "contracts/native-exception-history.json").read_text())["entries"]
     record = next(r for r in records if r["id"] == record_id)
     current = [h for h in QUALITY["handlers"](QUALITY["collect"](root, ["src"]))
                if h["module_id"] == record["module_id"]
                and h["symbol"] == record["symbol"]
                and h["handler_fingerprint"] == record["handler_fingerprint"]]
-    assert len(current) == 1
     assert record["status"] == "active"
     assert record["failure_outcome"] == outcome
     passed = set(record["evidence_tests"])
+    if not current:
+        assert current == []
+        # Neither historical approval nor synthetic passing selectors can
+        # authorize a handler that has been removed or structurally replaced.
+        assert QUALITY["check_exceptions"](current, [{**record, "status": "proposed"}], passed)
+        assert QUALITY["check_exceptions"](current, [record], passed)
+        assert QUALITY["check_exceptions"](current, [record], set())
+        return
+    assert len(current) == 1
     assert QUALITY["check_exceptions"](current, [{**record, "status": "proposed"}], passed)
     reviewed_fixture = [{**record, "status": "active"}]
     assert not QUALITY["check_exceptions"](current, reviewed_fixture, passed)
@@ -866,22 +947,23 @@ def test_adopted_compatibility_record_is_exact_and_proposals_still_fail(record_i
 
 def test_adopted_non_audit_turn_record_still_requires_approval_and_evidence():
     root = Path(QUALITY["__file__"]).resolve().parents[2]
-    records = QUALITY["load_records"](root)["exceptions.json"]["entries"]
+    records = json.loads((root / "contracts/native-exception-history.json").read_text())["entries"]
     record = next(r for r in records if r["id"] == "turn-error-event-before-propagation")
     current = [h for h in QUALITY["handlers"](QUALITY["collect"](root, ["src"]))
                if h["module_id"] == record["module_id"] and h["symbol"] == record["symbol"]]
-    assert len(current) == 1
+    assert record["module_id"] in RETIRED_EXCEPTION_MODULES
+    assert current == []
     assert record["failure_outcome"] == "propagation"
     assert record["status"] == "active"
     passed = set(record["evidence_tests"])
     assert QUALITY["check_exceptions"](current, [{**record, "status": "proposed"}], passed)
-    assert not QUALITY["check_exceptions"](current, [{**record, "status": "active"}], passed)
+    assert QUALITY["check_exceptions"](current, [{**record, "status": "active"}], passed)
     assert QUALITY["check_exceptions"](current, [{**record, "status": "active"}], set())
 
 
 def test_initial_adoption_activates_only_existing_records_and_preserves_retirements():
     root = Path(QUALITY["__file__"]).resolve().parents[2]
-    records = QUALITY["load_records"](root)["exceptions.json"]["entries"]
+    records = json.loads((root / "contracts/native-exception-history.json").read_text())["entries"]
     retired = {
         "legacy-orchestrator-token-setter", "legacy-text-provider-obo-service-fallback",
         "foundry-context-obo-compatibility", "legacy-multimodal-obo-service-fallback",
@@ -894,12 +976,35 @@ def test_initial_adoption_activates_only_existing_records_and_preserves_retireme
     approval = "https://github.com/Azure/GPT-RAG/issues/681#issuecomment-5601804634"
     assert all(record["status"] == "active" for record in records)
     assert all(approval in record["review"] for record in records)
-    policy = QUALITY["load_records"](root)["policy.json"]
-    assert policy["review"]["status"] == "active"
-    assert policy["review"]["reference"] == approval
     current = QUALITY["handlers"](QUALITY["collect"](root, ["src"]))
     key = lambda item: (item["module_id"], item["symbol"], item["handler_fingerprint"])
+    record_keys = {key(record) for record in records}
+    current_keys = {key(handler) for handler in current}
+    assert record_keys - current_keys
+    assert {
+        (handler["module_id"], handler["symbol"])
+        for handler in current if key(handler) not in record_keys
+    } == {
+        ("plugins.nl2sql.plugin", "NL2SQLPlugin._bounded_query"),
+    }
+    # The protected gate still fails closed on both stale approvals and the
+    # changed SQL handlers, even if all historical evidence selectors are present.
+    passed = {selector for record in records for selector in record["evidence_tests"]}
+    findings = QUALITY["check_exceptions"](current, records, passed)
+    assert findings
+    assert any(finding["rule"] == "broad-handler" for finding in findings)
+    assert any(finding["rule"] == "unused-exception" for finding in findings)
+
+
+def test_native_major_current_records_bind_exact_live_handlers():
+    root = Path(QUALITY["__file__"]).resolve().parents[2]
+    current = QUALITY["handlers"](QUALITY["collect"](root, ["src"]))
+    records = QUALITY["load_records"](root)["exceptions.json"]["entries"]
+    key = lambda item: (item["module_id"], item["symbol"], item["handler_fingerprint"], tuple(item["caught_types"]))
     assert {key(record) for record in records} == {key(handler) for handler in current}
+    assert all(record["status"] == "active" for record in records)
+    # This validator fixture is not the gate's real executed behavioral evidence.
+    assert QUALITY["check_exceptions"](current, records, set())
 
 
 @pytest.mark.parametrize("file,mutate", [
@@ -997,13 +1102,14 @@ def protected_aggregate(tmp_path_factory):
 @pytest.mark.parametrize("mutation", [
     None, "missing", "stale", "tampered", "skipped", "policy", "all-policy",
     "toolchain", "run_id", "run_attempt", "repository", "schema", "bootstrap",
-    "inventory", "duplicate", "wrong-base-checkout",
+    "inventory", "duplicate", "wrong-head-checkout",
 ])
 def test_actual_aggregate_fails_closed(tmp_path, protected_aggregate, mutation):
     protected, base = protected_aggregate
     expected = report_context()
     for check in QUALITY["CHECKS"]:
         report = successful_report(check, expected, base)
+        report["head_sha"] = base
         if mutation == "all-policy":
             report["policy_sha"] = "c" * 64
         if check == "lint":
@@ -1038,8 +1144,8 @@ def test_actual_aggregate_fails_closed(tmp_path, protected_aggregate, mutation):
     proc = subprocess.run(
         [sys.executable, "-I", "-S", str(protected / ".github" / "scripts" / "aggregate-quality.py"),
          "--reports", str(tmp_path),
-         "--base-sha", "e" * 40 if mutation == "wrong-base-checkout" else base,
-         "--head-sha", "b" * 40, "--repository", QUALITY["REPOSITORY"],
+         "--base-sha", base,
+         "--head-sha", "e" * 40 if mutation == "wrong-head-checkout" else base, "--repository", QUALITY["REPOSITORY"],
          "--run-id", "1234", "--run-attempt", "1",
          "--needs", json.dumps(needs)],
         capture_output=True, text=True,
@@ -1290,12 +1396,21 @@ def test_executable_import_linter_config_is_rejected(isolated_policy_repo, confi
 def test_isolated_tools_still_report_real_source_errors(isolated_policy_repo, check, source, rule):
     root = isolated_policy_repo
     (root / "src" / "seed.py").write_text(source)
-    # Candidate tool config cannot replace the protected config or load a plugin.
-    (root / "pyproject.toml").write_text('[tool.mypy]\nplugins = ["malicious"]\n')
+    # Real errors remain findings under reviewed, non-executable tool configuration.
     proc, report = isolated_check(root, check)
     assert proc.returncode == 1, (proc.stdout, proc.stderr, report)
     findings = report["checks"][check]["findings"]
     assert rule in {item.get("identity", {}).get("rule", item["rule"]) for item in findings}
+
+
+def test_analysis_uses_reviewed_tool_configuration(isolated_policy_repo):
+    root = isolated_policy_repo
+    config = (root / "pyproject.toml").read_text().replace('["F821"]', '["F821", "F841"]')
+    (root / "pyproject.toml").write_text(config)
+    (root / "src" / "seed.py").write_text("def f() -> int:\n unused = 1\n return 1\n")
+    proc, report = isolated_check(root, "lint")
+    assert proc.returncode == 1, report
+    assert {f["rule"] for f in report["checks"]["lint"]["findings"]} == {"F841"}
 
 
 def surface_record(name="seed", **overrides):

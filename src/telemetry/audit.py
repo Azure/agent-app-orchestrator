@@ -548,8 +548,11 @@ def current_audit_context() -> AuditRequestContext | None:
 
 def begin_audit_request(
     correlation_id: str | None = None,
+    *, context: AuditRequestContext | None = None,
 ) -> tuple[AuditRequestContext, contextvars.Token]:
-    context = AuditRequestContext(correlation_id=correlation_id or new_correlation_id())
+    context = context if context is not None else AuditRequestContext(
+        correlation_id=correlation_id or new_correlation_id(),
+    )
     return context, _current_context.set(context)
 
 
@@ -563,8 +566,9 @@ async def invoke_audited_tool(
     *,
     tool_kind: str = "in_process",
     sensitive_arguments: Any = None,
+    emitter: AuditEmitter | None = None,
 ) -> T:
-    emitter = AuditEmitter.default()
+    emitter = emitter if emitter is not None else AuditEmitter.default()
     context = _current_context.get()
     if not emitter.enabled or context is None:
         result = invocation()
@@ -684,12 +688,12 @@ def wrap_ai_functions(
     *,
     tool_kind: str = "mcp",
 ) -> list[Any]:
-    """Return public MAF AIFunction proxies with audited invocation delegates."""
-    from agent_framework import AIFunction
+    """Return public native MAF FunctionTool proxies with audited delegates."""
+    from agent_framework import FunctionTool
 
     wrapped: list[Any] = []
     for original in functions:
-        if not isinstance(original, AIFunction):
+        if not isinstance(original, FunctionTool):
             wrapped.append(original)
             continue
 
@@ -700,13 +704,13 @@ def wrap_ai_functions(
         ) -> Any:
             return await invoke_audited_tool(
                 _tool_name,
-                lambda: _original.invoke(**kwargs),
+                lambda: _original.invoke(arguments=kwargs, skip_parsing=True),
                 tool_kind=tool_kind,
                 sensitive_arguments=kwargs,
             )
 
         wrapped.append(
-            AIFunction(
+            FunctionTool(
                 name=original.name,
                 description=original.description,
                 approval_mode=original.approval_mode,
@@ -715,6 +719,7 @@ def wrap_ai_functions(
                 additional_properties=original.additional_properties,
                 func=audited_function,
                 input_model=original.input_model,
+                result_parser=original.result_parser,
             )
         )
     return wrapped

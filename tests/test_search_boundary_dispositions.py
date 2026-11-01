@@ -11,8 +11,7 @@ from pydantic import ValidationError
 from connectors import search
 from connectors.foundry_iq import McpSourceError
 from connectors.foundry_iq_mcp import McpConfigurationError, McpCredentialError
-from test_http_boundary_dispositions import actual_config, _retry_failure
-from test_retrieval_logging import search_client
+from boundary_fixtures import actual_config, _retry_failure, search_client
 
 
 @pytest.mark.parametrize("name", [

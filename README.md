@@ -15,11 +15,21 @@ description: Python orchestration service for Agent Landing Zone conversational 
 -->
 # Agent Landing Zone Orchestrator
 
-The Python 3.12 service for conversational agent execution in
-[Agent Landing Zone](https://github.com/Azure/agent-landing-zone). It selects a
-configured strategy, streams answers, and integrates models, retrieval, and
-tools. Classic execution uses FastAPI and Cosmos DB conversation storage.
-The separate Microsoft Foundry hosted entrypoint is stateless.
+The Python 3.12 native Microsoft Agent Framework runtime for
+[Agent Landing Zone](https://github.com/Azure/agent-landing-zone). It defines
+`agent-lz-conversation` and the human-reviewed `agent-lz-research-review` graph, with
+independent optional Search, Foundry IQ, MCP, NL2SQL and multimodal capabilities.
+Foundry Responses hosting owns Hosted state; the official Durable Extension
+and Durable Task Scheduler own Container Apps execution. There is no classic
+service bootstrap, state migration or shared host protocol.
+
+The native feature requires coordinated platform/UI changes and a component
+major release. Classic strategy/HTTP/admin routes are retired, not fallbacks.
+Previous data is not converted or deleted: rollback uses the previous deployment
+and its own state. See the [native executable contract](contracts/native-runtime.json).
+Delegated DAX/multimodal adapters remain available to the invocation-local identity
+seam, but the native hosts do not yet supply those delegated tokens; they fail closed.
+Local SDK tests are not evidence of deployed durability or user/source isolation.
 
 ## Documentation
 

@@ -383,13 +383,13 @@ $fullImageName = "$($values.CONTAINER_REGISTRY_LOGIN_SERVER)/azure-gpt-rag/${ima
 
 if ($buildMode -eq 'local') {
     Write-Blue 'Building Docker image...'
-    Invoke-ExternalCommand -FilePath 'docker' -Arguments @('build','--platform','linux/amd64','-t',$fullImageName,'.') -What 'Docker build' | Out-Null
+    Invoke-ExternalCommand -FilePath 'docker' -Arguments @('build','--platform','linux/amd64','--target','container_apps','-t',$fullImageName,'.') -What 'Docker build' | Out-Null
     Write-Blue 'Pushing image...'
     Invoke-ExternalCommand -FilePath 'docker' -Arguments @('push',$fullImageName) -What 'Docker push' | Out-Null
     Write-Green 'Image pushed.'
 } else {
     Write-Blue 'Building image remotely via az acr build...'
-    $acrBuildArgs = @('acr','build','--registry',$values.CONTAINER_REGISTRY_NAME,'--image',"azure-gpt-rag/${imageRepository}:$tag",'--file','Dockerfile','--no-logs')
+    $acrBuildArgs = @('acr','build','--registry',$values.CONTAINER_REGISTRY_NAME,'--image',"azure-gpt-rag/${imageRepository}:$tag",'--file','Dockerfile','--target','container_apps','--no-logs')
     if ($env:ACR_TASK_AGENT_POOL) {
         Invoke-ExternalCommand -FilePath 'az' -Arguments @('acr','agentpool','show','--registry',$values.CONTAINER_REGISTRY_NAME,'--name',$env:ACR_TASK_AGENT_POOL,'--resource-group',$values.AZURE_APP_RESOURCE_GROUP,'--only-show-errors') -What 'validate ACR task agent pool' | Out-Null
         $acrBuildArgs += @('--agent-pool',$env:ACR_TASK_AGENT_POOL)
