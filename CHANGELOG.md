@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [v6.0.0] - 2026-11-01
 
 ### Changed
 
@@ -8,6 +8,11 @@
   stateless adapter with MAF Agent conversations and a named human-reviewed graph,
   using official Responses hosting or the standalone Durable Extension with DTS.
   Separate host dependency groups/images and capture scoped functional run settings.
+- **Canonical public selection.** Use only `ORCHESTRATION_HOST` with
+  `hosted` or `container_apps`, and `APPLICATION_MODE` with `conversational`,
+  `workflow` or `both`. Hosted requires one mode per publication; `both`
+  uses separate Hosted publications. Entry points are `native.hosted` and
+  `native.durable`; no classic or hosted-panel selection is exposed.
 - **Maintainable quality controls.** Evaluate the reviewed checker, aggregate,
   contracts, tool pins and dependency groups, retaining base regression guards
   against new typing debt, lost live-module coverage, widened suppressions,
@@ -60,6 +65,55 @@
   across competing SQL worker failures without a catch-all translation.
   Restore isolated Foundry credential evidence for unchanged approved handlers;
   no classic strategy bootstrap or suppression is added by those repairs.
+
+### Migration and recovery
+
+- **Coordinated major adoption.** Adopt compatible platform configuration,
+  UI/BFF, native orchestrator and central documentation together; do not route
+  classic clients to the new execution contracts. The UI/BFF owns product
+  authentication, history, feedback and attachment admission. Preserve the
+  native typed topic/start, approve-or-reject/comment and structured result
+  contracts and the exact four-DTO Hosted checkpoint allowlist. Hosted
+  human-reviewed workflows require native stored history (`store=true`).
+- **Isolated native state.** Use a new isolated-v2 DTS task hub without
+  processing legacy entities. There is no classic fallback or conversation,
+  checkpoint, profile-memory or task-hub migration engine. Preserve the
+  previous compatible deployment, complete component pins, configuration,
+  immutable image digests and its own data as the rollback boundary.
+- **Attachment and tool prerequisites.** Authenticated conversational uploads
+  require a prompt and permit at most three files, 65,536 bytes per file and
+  262,144 serialized bytes per turn; file-only and workflow attachments are
+  unsupported. Actual file/vision-capable models, resources, identity/RBAC and
+  optional-tool permissions remain deployment prerequisites, not runtime
+  provisioning. Delegated DAX/multimodal adapters remain at the invocation
+  identity seam; the native hosts do not yet supply their delegated tokens,
+  so those paths fail closed.
+- **Source-only publication and recovery.** The release describes source
+  adoption, not a package, image or deployment publication. Previous source
+  release `v5.3.1` points to `56edbebadb1d93636af0906ead8803b6d2af5574`;
+  this is not necessarily the previous deployed platform pin. Recover by
+  routing to the prior compatible deployment/UI and its original state,
+  never by pointing classic code at native checkpoints. Preserve immutable
+  public tags and prefer a reviewed forward corrective release.
+
+### Validation
+
+- Native feature PR427 passed its actual tests, frontend build, five quality
+  checks and quality-gate in run `41313312179` at
+  `26a519ade029870a9eae8a1ebc098a93d8a32b2a`, then normally squash-merged
+  into develop as `46d2486d394ed7227c442d9beac09688e12db85c`.
+  This source evidence is not a substitute for the release PR's main-target
+  checks or the coordinated platform's exact component-combination validation.
+- Release validation uses the maintained pytest suite, frontend build and
+  reviewed-revision quality checks with the actual main base, retaining
+  repository/base/head/run-bound reports and source-retirement provenance.
+- Preserve main's documentation-centralization history
+  `287a7f8ff75333178362c0c264e93d6972fe0037` and the central product,
+  operator and developer documentation ownership in Azure/AI-Landing-Zones.
+- No Azure deployment, live model file/vision understanding, deployed
+  durability, live user/source isolation, private-network, complete remote
+  audit-pipeline or full Azure infrastructure-parity proof is claimed.
+  Frontend build is not a native-image build; no local Docker engine is used.
 
 ## [v5.3.1] - 2026-10-30
 
