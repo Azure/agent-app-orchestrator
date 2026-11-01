@@ -4,8 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-AGENT_NAME = "alz-conversation"
-WORKFLOW_NAME = "alz-research-review"
+AGENT_NAME = "agent-lz-conversation"
+WORKFLOW_NAME = "agent-lz-research-review"
 
 
 class Contract(BaseModel):

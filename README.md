@@ -17,7 +17,7 @@ description: Python orchestration service for Agent Landing Zone conversational 
 
 The Python 3.12 native Microsoft Agent Framework runtime for
 [Agent Landing Zone](https://github.com/Azure/agent-landing-zone). It defines
-`alz-conversation` and the human-reviewed `alz-research-review` graph, with
+`agent-lz-conversation` and the human-reviewed `agent-lz-research-review` graph, with
 independent optional Search, Foundry IQ, MCP, NL2SQL and multimodal capabilities.
 Foundry Responses hosting owns Hosted state; the official Durable Extension
 and Durable Task Scheduler own Container Apps execution. There is no classic

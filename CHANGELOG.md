@@ -18,6 +18,30 @@
   /orchestrator, /conversations and /api/dashboard execution. Adoption requires a
   coordinated component major; rollback retains the prior deployment and its data.
   No conversation/checkpoint migration or runtime provisioning is introduced.
+- **Obsolete execution tests.** Retire tests bound directly to the removed
+  classic API, strategy and orchestration contracts. Record the major-version
+  replacement and retained tool/security coverage in
+  `contracts/native-major-retirement.json`; no test skip or guardrail waiver is added.
+  Preserve shared connector fixtures and Search/Cosmos failure and permission
+  tests independently of the retired HTTP and strategy bootstraps.
+
+### Fixed
+
+- **Managed-identity DTS binding.** Align the worker with the platform/UI
+  `Authentication=ManagedIdentity` contract and pass an explicit
+  `ManagedIdentityCredential` to DTS. `AZURE_CLIENT_ID` selects a user-assigned
+  identity. An explicit `Authentication=DefaultAzure` remains a separate local
+  worker option, never a deployed UI binding or automatic fallback.
+- **First-release native registrations.** Use `agent-lz-conversation` and
+  `agent-lz-research-review` consistently with the platform naming contract.
+  No previously released native sessions or checkpoints need migration.
+- **Native inline attachment contract.** Verify TXT/MD, PDF and PNG/JPEG through
+  the actual Responses host and published Foundry model serializer. The
+  authenticated UI owns optional upload admission; no ingestion or private Blob
+  execution adapter is added. Model file/vision support remains a deployment prerequisite.
+- **Native SDK CI dependencies.** Install both pinned host groups in the
+  test job so real Hosted and DTS suites execute; runtime images remain separate.
+  Protected-base evaluation, required statuses and negative controls are unchanged.
 
 ## [v5.3.1] - 2026-10-30
 

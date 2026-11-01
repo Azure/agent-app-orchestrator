@@ -1,11 +1,13 @@
 """Actual product Responses host against published SDK, without a listening server."""
 
+import base64
 import json
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import httpx
+import httpx2
 import pytest
 
 pytest.importorskip("agent_framework_foundry_hosting")
@@ -15,6 +17,81 @@ from native.agent import create_agent
 from native.contracts import ResearchReviewResult, ResearchReviewStart
 from native.tools import ToolIdentity
 from test_native_runtime import RecordingClient, fake_config
+
+
+@pytest.mark.parametrize("name,media_type,data", [
+    ("note.txt", "text/plain", b"synthetic private text"),
+    ("note.md", "text/markdown", b"# synthetic private text"),
+    ("note.pdf", "application/pdf", b"%PDF-synthetic"),
+    ("image.png", "image/png", b"\x89PNG\r\n\x1a\n"),
+    ("image.jpg", "image/jpeg", b"\xff\xd8\xff"),
+    ("image.jpeg", "image/jpeg", b"\xff\xd8\xff"),
+])
+async def test_native_inline_input_reaches_real_foundry_model_serialization(
+    monkeypatch, tmp_path, name, media_type, data,
+):
+    from agent_framework.foundry import FoundryChatClient
+    from openai import AsyncOpenAI
+
+    monkeypatch.setenv("AGENTSERVER_STATE_ROOT", str(tmp_path))
+    monkeypatch.setenv("FOUNDRY_AGENT_SESSION_ID", "synthetic-session")
+    packets = []
+
+    def model_boundary(request):
+        assert request.url.path == "/v1/responses"
+        packets.append(json.loads(request.content))
+        return httpx2.Response(200, json={
+            "id": "synthetic-response", "object": "response", "created_at": 0,
+            "model": "synthetic-model", "status": "completed", "output": [{
+                "id": "synthetic-message", "type": "message", "status": "completed",
+                "role": "assistant", "content": [{
+                    "type": "output_text", "text": "Synthetic response", "annotations": [],
+                }],
+            }],
+        })
+
+    # Inject only the public project-client/HTTP boundary. The native host,
+    # Agent, FoundryChatClient and OpenAI serialization all use published APIs.
+    transport = httpx2.AsyncClient(transport=httpx2.MockTransport(model_boundary))
+    openai_client = AsyncOpenAI(
+        api_key="synthetic-test-placeholder", base_url="https://model.example.invalid/v1",
+        http_client=transport,
+    )
+    project = SimpleNamespace(get_openai_client=lambda **_: openai_client)
+    model = FoundryChatClient(project_client=project, model="synthetic-model")
+    monkeypatch.setattr(hosted, "create_agent", lambda config, **_: create_agent(config, client=model))
+    server = hosted.build_server(fake_config(mode="conversational"))
+    uri = f"data:{media_type};base64,{base64.b64encode(data).decode('ascii')}"
+    content = (
+        {"type": "input_image", "image_url": uri} if media_type.startswith("image/")
+        else {"type": "input_file", "filename": name, "file_data": uri}
+    )
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=server), base_url="http://test") as client:
+            response = await client.post("/responses", headers={
+                "x-agent-user-id": "synthetic-user", "x-agent-foundry-call-id": "synthetic-call",
+            }, json={
+                "input": [{"role": "user", "content": [{"type": "input_text", "text": "Inspect"}, content]}],
+                "store": True, "stream": False,
+            })
+        assert response.status_code == 200 and response.json()["status"] == "completed", response.text
+        assert len(packets) == 1
+        user = next(message for message in packets[0]["input"] if message.get("role") == "user")
+        if media_type.startswith("image/"):
+            item = next(item for item in user["content"] if item["type"] == "input_image")
+            assert item["image_url"] == uri
+        elif media_type.startswith("text/"):
+            # The native SDK decodes UTF-8 file content to model text, rather
+            # than sending a text file through the PDF/image model envelope.
+            assert any(
+                item["type"] == "input_text" and data.decode("utf-8") in item["text"]
+                for item in user["content"]
+            ), user
+        else:
+            item = next(item for item in user["content"] if item["type"] == "input_file")
+            assert item["filename"] == name and item["file_data"] == uri
+    finally:
+        await openai_client.close()
 
 
 async def test_parser_uses_typed_start_and_native_pending_response_decoder():

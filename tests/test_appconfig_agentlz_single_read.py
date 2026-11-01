@@ -1,9 +1,6 @@
 """Agent Landing Zone single read (Azure/GPT-RAG#695): only the agent-lz label and AGENTLZ_ keys are read."""
 
-from unittest.mock import patch
-
-import ast
-from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
@@ -147,14 +144,19 @@ def test_missing_key_still_raises(monkeypatch, mock_identity_manager):
         cfg.get("AGENTLZ_MISSING")
 
 
-def test_telemetry_service_name_uses_agentlz_prefix():
-    main_src = Path(__file__).resolve().parents[1] / "src" / "main.py"
-    tree = ast.parse(main_src.read_text(encoding="utf-8"))
-    calls = [
-        n for n in ast.walk(tree)
-        if isinstance(n, ast.Call) and getattr(n.func, "attr", None) == "configure_monitoring"
-    ]
-    assert len(calls) == 1
-    service_name = calls[0].args[2]
-    assert isinstance(service_name, ast.Constant) and service_name.value == "agentlz.orchestrator"
+def test_telemetry_service_name_uses_native_component_name(monkeypatch):
+    from native.bootstrap import configure_worker_telemetry, service_version
+    from telemetry import Telemetry
+
+    config = MagicMock()
+    basic = MagicMock()
+    monitoring = MagicMock()
+    monkeypatch.setattr(Telemetry, "configure_basic", basic)
+    monkeypatch.setattr(Telemetry, "configure_monitoring", monitoring)
+    configure_worker_telemetry(config)
+    basic.assert_called_once_with(config)
+    monitoring.assert_called_once_with(
+        config, "APPLICATIONINSIGHTS_CONNECTION_STRING",
+        "agent-app-orchestrator", service_version(),
+    )
     assert constants.APP_NAME == "agent-app-orchestrator"

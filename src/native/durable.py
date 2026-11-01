@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from agent_framework_durabletask import DurableAIAgentWorker
+from azure.identity import DefaultAzureCredential, ManagedIdentityCredential
 from durabletask.azuremanaged.worker import DurableTaskSchedulerWorker
 
 from .agent import agent_factory, create_agent
@@ -17,12 +18,8 @@ from .contracts import AGENT_NAME
 from .workflow import build_workflow
 
 
-def scheduler_binding(value: str) -> dict[str, str]:
-    """Translate the nonsecret deployment binding to official Python SDK inputs.
-
-    Python 1.12.0 has explicit host_address/taskhub arguments, not a
-    from_connection_string factory. Do not infer an endpoint from resource names.
-    """
+def _scheduler_settings(value: str) -> tuple[dict[str, str], str]:
+    """Validate deployment MI or the explicit, separate local credential chain."""
     fields: dict[str, str] = {}
     for item in value.split(";"):
         if not item.strip():
@@ -35,7 +32,7 @@ def scheduler_binding(value: str) -> dict[str, str]:
     if set(fields) != {"Endpoint", "TaskHub", "Authentication"}:
         raise ValueError("DTS binding requires Endpoint, TaskHub and Authentication.")
     if fields["Authentication"] not in ("ManagedIdentity", "DefaultAzure"):
-        raise ValueError("DTS requires identity-based authentication, not a secret.")
+        raise ValueError("DTS requires ManagedIdentity or explicit local DefaultAzure authentication.")
     endpoint = urlsplit(fields["Endpoint"])
     if (
         endpoint.scheme != "https" or not endpoint.hostname or endpoint.path not in ("", "/")
@@ -43,7 +40,21 @@ def scheduler_binding(value: str) -> dict[str, str]:
         or not fields["TaskHub"] or any(c.isspace() for c in fields["TaskHub"])
     ):
         raise ValueError("Invalid provisioned DTS endpoint or task hub.")
-    return {"host_address": fields["Endpoint"].rstrip("/"), "taskhub": fields["TaskHub"]}
+    return (
+        {"host_address": fields["Endpoint"].rstrip("/"), "taskhub": fields["TaskHub"]},
+        fields["Authentication"],
+    )
+
+
+def scheduler_binding(value: str) -> dict[str, str]:
+    """Translate a validated nonsecret binding to official Python SDK inputs.
+
+    Python 1.12.0 has explicit host_address/taskhub arguments, not a
+    from_connection_string factory. The platform/UI deployment uses
+    ManagedIdentity. DefaultAzure is a separate local worker choice, not a
+    deployment fallback. Never infer an endpoint from resource names.
+    """
+    return _scheduler_settings(value)[0]
 
 
 def build_worker(config: NativeConfig, worker: Any) -> DurableAIAgentWorker:
@@ -59,20 +70,25 @@ def build_worker(config: NativeConfig, worker: Any) -> DurableAIAgentWorker:
 
 
 def main() -> None:
-    from azure.identity import DefaultAzureCredential
-
     stopped = threading.Event()
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stopped.set())
-    binding = scheduler_binding(os.environ.get("DURABLE_TASK_SCHEDULER_CONNECTION_STRING", ""))
-    with DefaultAzureCredential() as credential:
+    binding, authentication = _scheduler_settings(
+        os.environ.get("DURABLE_TASK_SCHEDULER_CONNECTION_STRING", ""),
+    )
+    with (
+        DefaultAzureCredential() as credential,
+        (ManagedIdentityCredential(
+            client_id=os.environ.get("AZURE_CLIENT_ID") or None,
+        ) if authentication == "ManagedIdentity" else DefaultAzureCredential()) as scheduler_credential,
+    ):
         config = NativeConfig(os.environ.get("APP_CONFIG_ENDPOINT", ""), credential, credential)
         runtime = None
         try:
             asyncio.run(config.open())
             configure_worker_telemetry(asyncio.run(config.view()))
             runtime = build_worker(config, DurableTaskSchedulerWorker(
-                **binding, token_credential=credential, secure_channel=True,
+                **binding, token_credential=scheduler_credential, secure_channel=True,
             ))
             runtime.start()
             stopped.wait()

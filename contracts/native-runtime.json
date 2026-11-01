@@ -1,7 +1,7 @@
 {
   "contract_version": 1,
-  "agent_name": "alz-conversation",
-  "workflow_name": "alz-research-review",
+  "agent_name": "agent-lz-conversation",
+  "workflow_name": "agent-lz-research-review",
   "executor_ids": ["research", "human-review", "complete"],
   "business_types": {
     "start": "native.contracts.ResearchReviewStart",
@@ -35,6 +35,14 @@
       "native.contracts:ResearchReviewStart", "native.contracts:ReviewRequest",
       "native.contracts:ReviewDecision", "native.contracts:ResearchReviewResult"
     ],
+    "conversational_inline_input": {
+      "sdk_shapes": ["input_text", "input_file", "input_image"],
+      "utf8_txt_md": "Native SDK converts text-file data URI content to model input_text",
+      "pdf": "Native input_file with filename and file_data data URI",
+      "png_jpeg": "Native input_image with image_url data URI",
+      "admission_and_owner_checks": "UI/BFF owns the optional ENABLE_PRIVATE_ATTACHMENTS flag, file validation and authenticated owner/session checks",
+      "model_requirement": "The configured model must support the selected file/image input; serialization tests do not prove PDF interpretation or vision quality"
+    },
     "workflow_start": {"input": "{\"topic\":\"Synthetic research question\"}", "store": true},
     "workflow_pending": {
       "type": "function_call", "name": "request_info",
@@ -55,6 +63,8 @@
     "entrypoint": "python -m native.durable",
     "docker_target": "container_apps",
     "public_worker_http": false,
+    "native_state_budget_bytes": 1048576,
+    "native_state_capacity": "Published Durable Extension inherits the DTS budget with keep_all retention; native StateCapacityError remains possible as history grows. UI turn admission is not total-state accounting",
     "workflow_client": "agent_framework_durabletask.DurableWorkflowClient",
     "agent_client": "agent_framework_durabletask.DurableAIAgentClient",
     "agent_entity_version": 2,
@@ -73,7 +83,10 @@
       "send_hitl_response(instance_id, request_id, response, workflow_name)",
       "await_workflow_output(instance_id, workflow_name, timeout_seconds)"
     ],
-    "scheduler_binding": "Endpoint=<provisioned HTTPS endpoint>;TaskHub=<provisioned task hub>;Authentication=ManagedIdentity"
+    "scheduler_binding": "Endpoint=<provisioned HTTPS endpoint>;TaskHub=<provisioned task hub>;Authentication=ManagedIdentity",
+    "scheduler_credential": "azure.identity.ManagedIdentityCredential; AZURE_CLIENT_ID selects a user-assigned identity, otherwise use the system-assigned identity",
+    "scheduler_binding_default_azure": "Explicit separate local worker binding selects DefaultAzureCredential; never a deployment fallback. The platform emits ManagedIdentity and the deployed UI rejects DefaultAzure",
+    "scheduler_binding_recovery": "Regenerate settings from provisioned outputs and redeploy the coordinated worker/UI; no checkpoint conversion or task hub replacement"
   },
   "tools": {
     "enable_flags": ["SEARCH_RETRIEVAL_ENABLED", "FOUNDRY_IQ_ENABLED", "MCP_ENABLED", "NL2SQL_ENABLED", "MULTIMODAL_ENABLED"],
@@ -130,7 +143,7 @@
     "local_sdk_unit_contract_required": true,
     "private_live_deferred": true,
     "azure_smoke_supplemental": true,
-    "ui_attachment_and_ingestion_limits": "Owned by UI/ingestion; not certified by this runtime"
+    "ui_attachment_and_ingestion_limits": "Owned by UI/ingestion; native inline SDK serialization is tested, not live model processing or private deployment"
   },
   "migration_engine": false
 }

@@ -30,15 +30,15 @@ async def parse_workflow_turn(request: HostedResponseRequest) -> WorkflowTurn:
     return WorkflowTurn(input=ResearchReviewStart.model_validate_json(text))
 
 
-def build_server(config: NativeConfig, telemetry: ConfigView | None = None) -> ResponsesHostServer:
+def build_server(config: NativeConfig, observability_config: ConfigView | None = None) -> ResponsesHostServer:
     if config.settings is None or config.settings.host != "hosted":
         raise ValueError("The Hosted entrypoint requires ORCHESTRATION_HOST=hosted.")
     # Let the native host configure its own telemetry once, using scoped settings.
     observability: dict[str, Any] = {}
-    if telemetry is not None:
+    if observability_config is not None:
         observability = {
-            "applicationinsights_connection_string": telemetry.get("APPLICATIONINSIGHTS_CONNECTION_STRING"),
-            "log_level": telemetry.get("LOG_LEVEL", "INFO").lower(),
+            "applicationinsights_connection_string": observability_config.get("APPLICATIONINSIGHTS_CONNECTION_STRING"),
+            "log_level": observability_config.get("LOG_LEVEL", "INFO").lower(),
         }
     if config.settings.mode == "conversational":
         return ResponsesHostServer(

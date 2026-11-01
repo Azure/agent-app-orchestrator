@@ -1,0 +1,35 @@
+{
+  "application_major_version": 6,
+  "decision": "Agent Landing Zone ADR-0034",
+  "retired_contracts": [
+    "AGENT_STRATEGY and AgentStrategyFactory execution",
+    "Classic /orchestrator, /conversations and /api/dashboard",
+    "Stateless Hosted Responses adapter and classic SSE turn translation",
+    "Application-owned conversation compaction and profile-memory strategy state",
+    "Mixed retrieval context-provider and strategy composition",
+    "Classic Azure AI Agents citation and OpenAI chat strategy adapters",
+    "Classic HTTP principal-identity boundary (replaced by native platform context and UI/BFF)"
+  ],
+  "replacement_behavior_tests": [
+    "tests/test_native_runtime.py",
+    "tests/test_native_hosted.py",
+    "tests/test_native_durable.py",
+    "tests/test_native_tools.py"
+  ],
+  "retained_capability_security_tests": [
+    "tests/test_nl2sql_sql_validation.py",
+    "tests/test_nl2sql_plugin_boundaries.py",
+    "tests/test_sql_connection_boundaries.py",
+    "tests/test_mcp_client.py",
+    "tests/test_retrieval_plugin.py",
+    "tests/test_retrieval_plugin_boundaries.py",
+    "tests/test_audit_contract.py",
+    "tests/test_audit_emitter.py",
+    "tests/test_audit_propagation.py"
+  ],
+  "product_auth_history_feedback_attachment_ownership": "UI/BFF; native host owns model history and execution",
+  "retirement_rule": "Remove tests whose execution contract directly imports the retired API, strategy or orchestration packages. Retain connector, SQL, MCP, telemetry and native behavior/security coverage.",
+  "state_migration": false,
+  "legacy_fallback": false,
+  "release_gate": "Required protected-base quality and complete test checks remain mandatory; this retirement record does not waive any finding."
+}
