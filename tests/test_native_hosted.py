@@ -232,7 +232,8 @@ def test_hosted_identity_never_uses_request_metadata(monkeypatch):
     monkeypatch.setattr(core, "get_request_context", lambda: context)
     identity = hosted.hosted_identity()
     assert identity.call_id == "platform-call"
-    assert identity.dax_token is None
+    assert identity.search_token is None
+    assert not hasattr(identity, "dax_token")
     monkeypatch.setattr(core, "get_request_context", lambda: None)
     with pytest.raises(ValueError, match="trusted platform"):
         hosted.hosted_identity()

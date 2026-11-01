@@ -28,5 +28,14 @@
   "rollback": "Redeploy the preceding orchestrator and its configuration as a coordinated rollback; no checkpoint/data conversion and no automatic direct SQL fallback.",
   "documentation_handoff": "Azure/AI-Landing-Zones main: update NL2SQL selection, MCP resource auth/configuration and breaking direct SQL removal. Owned by the coordinated docs workspace, not this checkout.",
   "source_policy_review_required": "The unchanged annotation ratchet flags deletion of annotated nl2sql_tools, its execute_dax_query closure and ToolIdentity.dax_token within retained native.tools. This is intentional physical SQL symbol removal, not removal of annotations from surviving functions. No gate exception, checker change, typing-scope reduction or SQL stub is introduced.",
+  "ci_review": {
+    "run_id": "41353470774",
+    "evaluated_head": "2ea7eb20a6c012d4050e476af585ff5b1ba77d0d",
+    "tests": "Existing CI: 1052 passed, one failed. The extraction left test_hosted_identity_never_uses_request_metadata asserting the removed dax_token field. Its selector now checks that direct DAX identity is absent and the retained Search token is unavailable.",
+    "local_validation": "One attempt of tests/test_native_hosted.py::test_hosted_identity_never_uses_request_metadata: module skipped because agent_framework_foundry_hosting is unavailable in the local interpreter; no collectors, exit 4. Not a passing test. No suite or checker rerun.",
+    "typing": "Existing CI report: status error, mypy returned invalid JSON, exit 2. Analysis is incomplete; no typing diagnostics establish whether the cause is extraction-induced or unchanged legacy behavior. Unresolved, not waived.",
+    "policy": "Existing CI report: one annotation-removed finding at src/native/tools.py:1. Authorized retirement covers physically removed modules only, not removed symbols in this retained module. A human policy decision is needed before introducing a symbol-retirement mechanism; no workaround is authorized.",
+    "quality_gate": "Existing CI aggregate fails because tests and quality jobs failed. This record does not claim a green run or gate closure."
+  },
   "release": "Feature candidate only; no image, tag, release, Azure deployment or main merge."
 }
