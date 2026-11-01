@@ -1,25 +1,7 @@
-"""Regression test: the hosted-agent entrypoint must import cleanly on a
-fresh interpreter.
+"""Fresh native imports cannot depend on Azure or a warmed classic runtime.
 
-``src/api/hosted_entrypoint.py`` is intentionally Cosmos-free and, unlike
-``main.py``, never imports anything from ``connectors`` before it imports
-``dependencies``. That ordering previously triggered a circular import
-(``dependencies`` -> ``connectors`` (package init) -> ``connectors.cosmosdb``
--> ``dependencies`` again, before ``dependencies.get_config`` existed on the
-partially-initialized module) that crashed the process on the very first
-import -- before uvicorn could ever bind a port or serve ``GET /readiness``.
-Deployed as a Foundry hosted agent, this manifested as the platform reporting
-HTTP 424 ``session_not_ready`` on invoke ("container started but /readiness
-didn't return HTTP 200 within the timeout"), because the container's Python
-process never got that far.
-
-A regular in-process pytest test cannot reproduce this: by the time this test
-module runs, other test modules have already imported ``dependencies`` and
-``connectors`` into ``sys.modules`` in some order that happens to avoid the
-cycle, which would mask a regression. This test therefore spawns a fresh
-interpreter, exactly like the container's ``uvicorn ...:app`` entrypoint
-does, and imports only what the hosted entrypoint needs -- nothing else gets
-a chance to "warm up" ``connectors``/``dependencies`` first.
+Keep explicit negative coverage for retired entrypoints and lazy connector
+imports. Import success is not proof of deployed readiness or durability.
 """
 
 from __future__ import annotations
@@ -54,23 +36,28 @@ def _run_fresh_import(import_statement: str) -> subprocess.CompletedProcess[str]
 
 
 def test_hosted_entrypoint_imports_cleanly_on_a_fresh_interpreter() -> None:
-    """``import api.hosted_entrypoint`` must not raise ImportError.
-
-    This mirrors exactly how the hosted container's startup command
-    (``uvicorn api.hosted_entrypoint:app`` -- see ``HOSTED_STARTUP_COMMAND``
-    in the GPT-RAG umbrella's ``config/deployment/hosted_image.py``) loads
-    this module: a fresh process whose first touch of this package tree is
-    the hosted entrypoint itself.
-    """
-    completed = _run_fresh_import("import api.hosted_entrypoint")
+    """The actual native Docker module must load without classic bootstrap."""
+    completed = _run_fresh_import("import native.hosted")
 
     assert completed.returncode == 0, (
-        "api.hosted_entrypoint failed to import on a fresh interpreter "
+        "native.hosted failed to import on a fresh interpreter "
         f"(this is what the hosted agent container runs at startup):\n"
         f"{completed.stderr}"
     )
     assert "ImportError" not in completed.stderr
     assert "circular import" not in completed.stderr
+
+
+def test_classic_hosted_entrypoint_fails_explicitly_without_native_fallback() -> None:
+    completed = _run_fresh_import("import api.hosted_entrypoint")
+    assert completed.returncode != 0
+    assert "retired" in completed.stderr
+
+
+def test_classic_orchestrator_fails_explicitly_without_native_fallback() -> None:
+    completed = _run_fresh_import("import orchestration.orchestrator")
+    assert completed.returncode != 0
+    assert "retired" in completed.stderr
 
 
 def test_dependencies_module_alone_imports_without_touching_connectors() -> None:

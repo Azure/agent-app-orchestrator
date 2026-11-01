@@ -349,14 +349,14 @@ imageRef="${containerRegistryLoginServer}/azure-gpt-rag/${imageRepository}:${tag
 
 if [[ "$buildMode" == "local" ]]; then
   info "Building Docker image..."
-  docker build --platform linux/amd64 -t "$imageRef" .
+  docker build --platform linux/amd64 --target container_apps -t "$imageRef" .
 
   info "Pushing image..."
   docker push "$imageRef"
   success "Image pushed."
 else
   info "Building image remotely via az acr build..."
-  acr_build_args=(acr build --registry "$containerRegistryName" --image "azure-gpt-rag/${imageRepository}:${tag}" --file Dockerfile)
+  acr_build_args=(acr build --registry "$containerRegistryName" --image "azure-gpt-rag/${imageRepository}:${tag}" --file Dockerfile --target container_apps)
   if [[ -n "${ACR_TASK_AGENT_POOL:-}" ]]; then
     az acr agentpool show --registry "$containerRegistryName" --name "$ACR_TASK_AGENT_POOL" --resource-group "$resourceGroupName" --only-show-errors >/dev/null
     acr_build_args+=(--agent-pool "$ACR_TASK_AGENT_POOL")

@@ -1,4 +1,4 @@
-"""Foundry credential/request translations preserve MCP and cancellation distinctions."""
+"""Retained credential/request boundaries, independent of classic execution."""
 
 import asyncio
 from types import SimpleNamespace
@@ -10,14 +10,17 @@ from azure.core.exceptions import ClientAuthenticationError
 
 from connectors.foundry_iq import McpSourceError
 from connectors.foundry_iq_mcp import McpCredentialError
-from test_foundry_iq_mcp import _build_client, _source
+from foundry_boundary_fixtures import _build_client, _source
 
 
 @pytest.mark.parametrize("mcp", [False, True], ids=["legacy", "mcp"])
 @pytest.mark.parametrize("mode", ["sdk", "unexpected", "cancelled"])
 async def test_service_token_failure_never_reaches_http(mcp, mode, caplog):
     marker = "synthetic-private-service-token-detail"
-    cls = {"sdk": ClientAuthenticationError, "unexpected": RuntimeError, "cancelled": asyncio.CancelledError}[mode]
+    cls = {
+        "sdk": ClientAuthenticationError, "unexpected": RuntimeError,
+        "cancelled": asyncio.CancelledError,
+    }[mode]
     failure = cls(marker)
     client, session = _build_client(enabled=mcp)
     client.credential.get_token.side_effect = failure
@@ -38,8 +41,10 @@ async def test_service_token_failure_never_reaches_http(mcp, mode, caplog):
 @pytest.mark.parametrize("mode", ["unexpected", "known", "cancelled", "success"])
 async def test_actual_mcp_header_resolution_keeps_credential_failure_boundary(mode, caplog):
     marker = "synthetic-private-query-credential-detail"
-    failure = {"unexpected": RuntimeError, "known": McpCredentialError,
-               "cancelled": asyncio.CancelledError, "success": RuntimeError}[mode](marker)
+    failure = {
+        "unexpected": RuntimeError, "known": McpCredentialError,
+        "cancelled": asyncio.CancelledError, "success": RuntimeError,
+    }[mode](marker)
     client, session = _build_client(sources=[_source(query_headers=[{
         "name": "Authorization",
         "valueFrom": {"kind": "keyVaultSecret", "secretName": "test-reference"},

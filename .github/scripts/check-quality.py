@@ -1030,7 +1030,8 @@ def retired_modules(before, after, base_records, candidate):
             continue
         old = before.get(entry["import_name"])
         if (entry["import_name"] in after or old is None
-                or any(module["fingerprint"] == old["fingerprint"] for module in after.values())):
+                or (old["tree"].body and any(
+                    module["fingerprint"] == old["fingerprint"] for module in after.values()))):
             findings.append(finding("false-retirement", entry["path"],
                                     message="Removed inventory still has live or copied source"))
         else:

@@ -33,6 +33,10 @@ class CosmosDBClient:
         db = self._client.get_database_client(database=self.database_name)
         return db.get_container_client(container_name)
 
+    async def close(self):
+        """Close capability-owned clients without touching the legacy singleton."""
+        await self._client.close()
+
     async def list_documents(self, container_name) -> list:
         """
         Lists all documents from the given container.

@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "baseline_runtime_revision": "076d477c5c4ca51490e93fe48287242931c959af",
+  "baseline_ci_run": 41257245133,
+  "status": "Historical b3 bounded-repair evidence; superseded by maintained current-revision checks and contracts/native-major-retirement.json. Final native CI, not this record, decides acceptance.",
+  "protected_exception_records_changed": false,
+  "implemented_source_dispositions": [
+    {
+      "symbol": "plugins.nl2sql.plugin.NL2SQLPlugin.execute_sql_query",
+      "change": "Translate actual AzureError, pyodbc.Error and Pydantic ValidationError boundaries; propagate unexpected implementation failures with resource cleanup.",
+      "tests": [
+        "tests/test_nl2sql_plugin_boundaries.py::test_sql_tool_keeps_explicit_error_result_and_read_only_driver_inputs",
+        "tests/test_nl2sql_plugin_boundaries.py::test_unexpected_sql_failures_propagate_and_release_acquired_resources",
+        "tests/test_nl2sql_plugin_boundaries.py::test_sql_acquired_resources_close_without_replacing_outcome",
+        "tests/test_nl2sql_sql_validation.py::test_execute_sql_query_rejects_unsafe_query_before_datasource_access"
+      ],
+      "new_broad_approval": false
+    },
+    {
+      "symbol": "plugins.nl2sql.plugin.NL2SQLPlugin._execute_bounded_sql",
+      "change": "Remove arbitrary exception catch; inspect completed task state and preserve recorded caller cancellation over success, ODBC failure, unexpected failure or worker cancellation.",
+      "test": "tests/test_native_tools.py::test_native_query_cancellation_never_closes_a_running_odbc_handle",
+      "new_broad_approval": false
+    },
+    {
+      "symbol": "connectors.appconfig.AppConfigClient.__init__",
+      "change": "Retain Azure SDK and Requests transport availability handling; propagate unexpected provider implementation failures rather than reporting disabled configuration.",
+      "tests": [
+        "tests/test_appconfig_agentlz_single_read.py::test_transport_profile_preserves_provider_failure_classification",
+        "tests/test_appconfig_agentlz_single_read.py::test_unexpected_provider_failures_propagate_without_disabled_success"
+      ],
+      "new_broad_approval": false
+    }
+  ],
+  "restored_exact_evidence": [
+    {
+      "protected_record": "foundry-service-token-failure",
+      "source_handler_changed": false,
+      "test": "tests/test_foundry_connector_boundaries.py::test_service_token_failure_never_reaches_http",
+      "evidence": "All six exact approved selectors run against the real connector, with SDK/unexpected failure identity, cancellation, no HTTP and bounded diagnostics."
+    },
+    {
+      "protected_record": "foundry-mcp-query-credential-failure",
+      "source_handler_changed": false,
+      "test": "tests/test_foundry_connector_boundaries.py::test_actual_mcp_header_resolution_keeps_credential_failure_boundary",
+      "evidence": "All four exact approved selectors run against actual header resolution, including delegated-token preservation and credential/cancellation distinctions."
+    }
+  ],
+  "remaining_shared_boundary_review": [
+    {
+      "protected_record": "foundry-retrieve-request-failure",
+      "source_handler_changed": false,
+      "current_connector_selectors_restored": 14,
+      "remaining": "Resolved under current-revision evidence maintenance: fourteen actual connector selectors retained; two classic Hosted consumer selectors explicitly retired, never renamed or re-enabled."
+    },
+    {
+      "protected_record": "nl2sql-schema-unavailable-compatibility",
+      "source_handler_changed": false,
+      "remaining": "Resolved under current-revision evidence maintenance: six actual typed schema outcomes distinguish missing/provider/malformed/empty/success/cancellation; retired strategy selectors are not impersonated."
+    },
+    {
+      "protected_record": "nl2sql-sql-cleanup-preserves-primary-outcome",
+      "source_handler_changed": false,
+      "remaining": "Resolved under current-revision evidence maintenance: original direct cleanup selectors retained and actual unexpected/cursor-failure cleanup states added; three classic strategy-flow selectors explicitly retired."
+    },
+    {
+      "symbol": "plugins.nl2sql.plugin.NL2SQLPlugin._bounded_query",
+      "remaining": "Distinct exact native-bounded-sql-cleanup record now binds worker-owned release behavior, actual SQL/Fabric state matrix and independently tested caller cancellation; no approval inherited from the unbounded symbol."
+    }
+  ],
+  "legacy_execution_disposition": {
+    "state": "Already explicitly disabled by retired entrypoints and strategy facade; never required by native bootstrap",
+    "remaining": "Twenty-nine unused strategy/dashboard/turn/warmup source modules physically removed with matching surface inventory. Original exception records retained as historical data, never current allowances. Shared capability/security helpers and tests retained.",
+    "legacy_execution_reenabled_for_evidence": false
+  },
+  "release_gate_waiver": false,
+  "protected_evaluator_changed": false,
+  "source_manifest_or_candidate_dependency_bypass": false
+}

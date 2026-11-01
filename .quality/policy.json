@@ -30,11 +30,7 @@
       "connectors.obo.acquire_obo_token"
     ],
     "private_ownership": "Leading-underscore modules and members belong to their containing package; flat modules own themselves. Non-underscore exports of existing named modules remain public. Compatibility access is exact, not descendant-wide.",
-    "private_access": [
-      {"importer": "strategies.foundry_iq_context_provider", "target": "connectors.search._classify_retrieval_error"},
-      {"importer": "strategies.multimodal_search_context_provider", "target": "connectors.search._classify_retrieval_error"},
-      {"importer": "strategies.search_context_provider", "target": "connectors.search._classify_retrieval_error"}
-    ],
+    "private_access": [],
     "dynamic_imports": []
   },
   "toolchain": {"ruff": "0.16.5", "mypy": "2.3.1", "import-linter": "2.14", "grimp": "3.16"},

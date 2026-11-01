@@ -44,7 +44,7 @@ class SQLEndpointClient:
             f"Authentication=ActiveDirectoryServicePrincipal"
         )
         try:
-            connection = await asyncio.to_thread(pyodbc.connect, connection_string)
+            connection = await asyncio.to_thread(pyodbc.connect, connection_string, timeout=30)
             return connection
         except pyodbc.Error as e:
             logging.error("[fabric] Failed to connect to the SQL endpoint with service principal: %s", type(e).__name__)

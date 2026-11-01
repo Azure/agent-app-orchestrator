@@ -156,6 +156,11 @@ def _parse_cache_control_ttl(cache_control_header: str) -> int:
     return 3600  # Default fallback
 
 def get_config(action: str = None) -> AppConfigClient:
+    from native.config import current_config
+
+    scoped = current_config()
+    if scoped is not None:
+        return scoped
     global __config
     from connectors.appconfig import AppConfigClient  # deferred: see note above __config
 

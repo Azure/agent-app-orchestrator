@@ -88,16 +88,10 @@ def mock_identity_manager():
 
 @pytest.fixture()
 def patch_dependencies(mock_config, mock_cosmos, mock_identity_manager):
-    """Patch the main singletons so strategy constructors don't hit Azure."""
+    """Patch retained connector boundaries without importing retired strategies."""
     with (
         patch("dependencies.get_config", return_value=mock_config),
         patch("connectors.cosmosdb.get_cosmosdb_client", return_value=mock_cosmos),
         patch("connectors.identity_manager.get_identity_manager", return_value=mock_identity_manager),
-        # BaseAgentStrategy.__init__ imports these directly
-        patch("strategies.base_agent_strategy.get_config", return_value=mock_config),
-        patch("strategies.base_agent_strategy.get_cosmosdb_client", return_value=mock_cosmos),
-        patch("strategies.base_agent_strategy.get_identity_manager", return_value=mock_identity_manager),
-        # AIProjectClient is instantiated in base __init__
-        patch("strategies.base_agent_strategy.AIProjectClient"),
     ):
         yield

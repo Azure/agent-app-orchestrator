@@ -117,11 +117,10 @@ def test_producer_constants_match_current_contract():
 
 
 def test_runtime_audit_service_name_matches_contract_producer():
-    tree = ast.parse((ROOT / "src" / "main.py").read_text(encoding="utf-8"))
+    tree = ast.parse((ROOT / "src" / "native" / "tools.py").read_text(encoding="utf-8"))
     calls = [
         node for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and getattr(node.func, "attr", None) == "configure"
-        and getattr(node.func.value, "id", None) == "AuditEmitter"
+        if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "AuditEmitter"
     ]
     assert len(calls) == 1
     (service_name,) = [kw.value for kw in calls[0].keywords if kw.arg == "service_name"]
