@@ -1,5 +1,5 @@
 {
-  "contract_version": 1,
+  "contract_version": 2,
   "agent_name": "agent-lz-conversation",
   "workflow_name": "agent-lz-research-review",
   "executor_ids": ["research", "human-review", "complete"],
@@ -89,40 +89,22 @@
     "scheduler_binding_recovery": "Regenerate settings from provisioned outputs and redeploy the coordinated worker/UI; no checkpoint conversion or task hub replacement"
   },
   "tools": {
-    "enable_flags": ["SEARCH_RETRIEVAL_ENABLED", "FOUNDRY_IQ_ENABLED", "MCP_ENABLED", "NL2SQL_ENABLED", "MULTIMODAL_ENABLED"],
+    "enable_flags": ["SEARCH_RETRIEVAL_ENABLED", "FOUNDRY_IQ_ENABLED", "MCP_ENABLED", "MULTIMODAL_ENABLED"],
     "default_enabled": false,
-    "nl2sql_source_registry": "cosmos",
-    "nl2sql_catalog_container": {"key": "DATASOURCES_CONTAINER", "default": "datasources"},
-    "nl2sql_metadata_indexes": {
-      "SEARCH_TABLES_INDEX_NAME": "nl2sql-tables", "SEARCH_MEASURES_INDEX_NAME": "nl2sql-measures",
-      "SEARCH_QUERIES_INDEX_NAME": "nl2sql-queries"
-    },
-    "nl2sql_functions": [
-      "get_all_datasources_info", "get_all_tables_info", "get_schema_info", "tables_retrieval",
-      "measures_retrieval", "queries_retrieval", "validate_sql_query", "execute_sql_query", "execute_dax_query"
-    ],
-    "nl2sql_metadata_fields": {
-      "common": ["id", "description", "type"],
-      "sql_database": ["server", "database"],
-      "sql_database_optional": ["uid"],
-      "sql_endpoint": ["server", "database", "tenant_id", "client_id"],
-      "semantic_model": ["organization", "workspace", "dataset", "tenant_id", "client_id"]
-    },
-    "nl2sql_query_timeout_seconds": 30,
-    "nl2sql_max_rows": 1000,
-    "nl2sql_failure_boundary": {
-      "translated": ["pyodbc.Error", "azure.core.exceptions.AzureError", "pydantic.ValidationError"],
-      "unexpected_implementation_failures": "propagate, with acquired cursor/connection cleanup",
-      "cancelled_worker_failures": "recorded caller cancellation remains primary; no catch-all translation",
-      "cleanup_review": "distinct current unbounded and bounded worker cleanup records bind actual SQL/Fabric result, failure, resource and cancellation evidence; required current-revision CI decides acceptance"
-    },
-    "dax_requires_invocation_local_delegation": true,
+    "nl2sql_public_mcp_tools": ["nl2sql.list_sources", "nl2sql.query"],
+    "nl2sql_direct_execution": false,
+    "nl2sql_extraction_contract": "contracts/nl2sql-mcp-extraction.json",
     "multimodal_function": "multimodal_retrieve",
     "iq_tool_name": "foundry-iq",
-    "native_host_delegated_dax_multimodal_tokens": false,
+    "native_host_delegated_multimodal_tokens": false,
     "sql_provisioning_or_grants": false,
     "mcp_transport_default": "streamable_http",
-    "mcp_timeout_seconds": 30
+    "mcp_timeout_seconds": 30,
+    "platform_nl2sql_mcp_timeout_seconds": 90,
+    "mcp_bearer_scope": "MCP_AUTH_RESOURCE_SCOPE",
+    "mcp_bearer_credential": "Invocation-owned azure.identity.aio.ManagedIdentityCredential",
+    "mcp_bearer_api_key_fallback": false,
+    "mcp_result_content": "structured_first with text fallback and explicit isError failure"
   },
   "configuration": {
     "canonical_python_package": "native",
@@ -132,7 +114,8 @@
     "label": "agent-lz",
     "refresh_interval_seconds": 30,
     "structural_changes_require_redeployment": true,
-    "functional_snapshot": "Native executor state captured before research; no credential values",
+    "functional_snapshot": "Native executor state captured before research; no credential values. MCP_ENABLED and MCP connection/auth settings stay live per invocation, including workflow resume.",
+    "mcp_enabled_dynamic": true,
     "secrets": "Only selected enabled consumers; never checkpointed"
   },
   "retired_routes": ["/orchestrator", "/conversations", "/api/dashboard"],

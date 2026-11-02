@@ -10,6 +10,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = json.loads((ROOT / "contracts/native-major-retirement.json").read_text())
+EXTRACTION = json.loads((ROOT / "contracts/nl2sql-mcp-extraction.json").read_text())
 
 
 def historical_json(path: str) -> dict:
@@ -35,7 +36,7 @@ def test_physical_retirement_matches_source_backed_inventory():
     before = historical_json(".quality/module-surfaces.json")["entries"]
     current = json.loads((ROOT / ".quality/module-surfaces.json").read_text())["entries"]
     removed = {entry["id"] for entry in before if not (ROOT / entry["path"]).exists()}
-    assert removed == set(CONTRACT["physically_retired_modules"])
+    assert removed == set(CONTRACT["physically_retired_modules"]) | set(EXTRACTION["physically_retired_modules"])
     assert not removed.intersection(entry["id"] for entry in current)
     assert all((ROOT / entry["path"]).is_file() for entry in current)
 
@@ -47,16 +48,32 @@ def test_handler_history_is_preserved_but_never_a_current_allowance():
     current = json.loads((ROOT / ".quality/exceptions.json").read_text())
     old_ids = {entry["id"] for entry in history["entries"]}
     current_ids = {entry["id"] for entry in current["entries"]}
-    assert old_ids - current_ids == set(CONTRACT["retired_exception_ids"])
-    assert current_ids - old_ids == {"native-bounded-sql-cleanup"}
+    assert old_ids - current_ids == (
+        set(CONTRACT["retired_exception_ids"]) | set(EXTRACTION["retired_exception_ids"])
+    ) & old_ids
+    assert current_ids - old_ids == set()
 
 
 @pytest.mark.parametrize("path", [
-    "src/connectors/fabric.py", "src/connectors/sqldbs.py", "src/connectors/foundry_iq.py",
+    "src/connectors/foundry_iq.py",
     "src/connectors/search.py", "src/connectors/obo.py", "src/connectors/mcp_client.py",
-    "src/plugins/nl2sql/plugin.py", "src/plugins/nl2sql/sql_validation.py",
     "src/plugins/retrieval/plugin.py",
 ])
 def test_retirement_keeps_current_shared_capability_and_security_helpers(path):
     assert (ROOT / path).is_file()
-    assert all((ROOT / test).is_file() for test in CONTRACT["retained_capability_security_tests"])
+    assert all(
+        (ROOT / test).is_file() for test in CONTRACT["retained_capability_security_tests"]
+        if test not in EXTRACTION["retired_tests"]
+    )
+
+
+def test_extraction_is_physical_and_preserves_exact_pre_extraction_history():
+    result = subprocess.run(
+        ["git", "--no-pager", "show", f"{EXTRACTION['source_inventory_revision']}:.quality/module-surfaces.json"],
+        cwd=ROOT, capture_output=True, text=True, check=True,
+    )
+    before = json.loads(result.stdout)["entries"]
+    removed = {entry["id"] for entry in before if not (ROOT / entry["path"]).exists()}
+    assert removed == set(EXTRACTION["physically_retired_modules"])
+    assert all(not (ROOT / test).exists() for test in EXTRACTION["retired_tests"])
+    assert all((ROOT / test).exists() for test in EXTRACTION["replacement_behavior_tests"])

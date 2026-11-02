@@ -1,189 +1,41 @@
-"""Real MAF FunctionTool invocation reuses the existing NL2SQL/Fabric behavior."""
+"""Native tools keep non-SQL authorization/audit and consume generic MCP."""
 
+import json
 import pickle
-import asyncio
-import threading
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, asynccontextmanager
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from agent_framework import BaseChatClient, ChatResponse, Content, FunctionInvocationLayer, Message
 
-from native.agent import create_agent
-from native.config import ConfigView
-from native.tools import ToolIdentity, compose_tools, nl2sql_tools
-from test_native_runtime import fake_config
+from native.config import BASE_KEYS, TOOL_KEYS, ConfigView, FunctionalSnapshot, NativeConfig
+from native.tools import SourceRegistry, ToolIdentity, audited_function, compose_tools
 from test_audit_emitter import capture_audit_logs
+from test_native_runtime import BASE, RecordingClient
 
 
-VALUES = {
-    "NL2SQL_ENABLED": True, "NL2SQL_SOURCE_REGISTRY": "cosmos",
-    "DATABASE_ACCOUNT_NAME": "synthetic", "DATABASE_NAME": "metadata",
-}
-
-
-@pytest.fixture
-def registry():
-    return SimpleNamespace(
-        list_documents=AsyncMock(return_value=[{
-            "id": "sales", "description": "Synthetic sales", "type": "sql_database",
-        }]),
-        get_document=AsyncMock(return_value={
-            "id": "sales", "description": "Synthetic sales", "type": "sql_database",
-            "server": "sql.example.invalid", "database": "sales",
-        }),
-        close=AsyncMock(),
-    )
-
-
-async def configured_tools(resources, registry, values=None, identity=None):
-    with patch("native.tools.SourceRegistry", return_value=registry):
-        tools = await nl2sql_tools(
-            ConfigView({**VALUES, **(values or {})}, MagicMock()),
-            identity or ToolIdentity(), resources,
-        )
-    return {tool.name: tool for tool in tools}
-
-
-async def test_listing_sources_never_constructs_query_or_embedding_clients(registry):
-    with (
-        patch("plugins.nl2sql.plugin.SQLDBClient") as sql,
-        patch("plugins.nl2sql.plugin.SQLEndpointClient") as fabric,
-        patch("native.tools.MetadataSearch.search", side_effect=AssertionError("No Search access")),
-        patch("native.tools.Embeddings.get_embeddings", side_effect=AssertionError("No model access")),
-    ):
-        async with AsyncExitStack() as resources:
-            tools = await configured_tools(resources, registry)
-            result = await tools["get_all_datasources_info"].invoke(skip_parsing=True)
-            assert result.datasources[0].name == "sales"
-            sql.assert_not_called()
-            fabric.assert_not_called()
-    registry.close.assert_awaited_once()
-
-
-@pytest.mark.parametrize("query", [
-    "SELECT 1; DELETE FROM sales", "SELECT * INTO saved FROM sales",
-    "SELECT * FROM OPENQUERY(linked, 'SELECT 1')", "EXEC dbo.proc",
-])
-async def test_native_query_tool_reuses_actual_read_only_controls_before_registry_access(registry, query):
-    async with AsyncExitStack() as resources:
-        tools = await configured_tools(resources, registry)
-        result = await tools["execute_sql_query"].invoke(
-            arguments={"datasource": "sales", "query": query}, skip_parsing=True,
-        )
-        assert result.error and result.results is None
-        registry.get_document.assert_not_awaited()
-
-
-@pytest.mark.parametrize("rows,error", [([(1,)], False), ([(1,), (2,), (3,)], True)])
-async def test_native_query_timeout_row_limit_and_cleanup(registry, rows, error):
-    cursor = MagicMock()
-    cursor.description = [("value",)]
-    cursor.fetchmany.return_value = rows
-    connection = MagicMock()
-    connection.cursor.return_value = cursor
-    with patch("plugins.nl2sql.plugin.SQLDBClient", return_value=SimpleNamespace(
-        create_connection=AsyncMock(return_value=connection),
-    )):
-        async with AsyncExitStack() as resources:
-            tools = await configured_tools(resources, registry, {"NL2SQL_MAX_ROWS": 2})
-            result = await tools["execute_sql_query"].invoke(
-                arguments={"datasource": "sales", "query": "SELECT value FROM sales"}, skip_parsing=True,
-            )
-    assert bool(result.error) is error
-    assert connection.timeout == 30
-    cursor.fetchmany.assert_called_once_with(3)
-    cursor.fetchall.assert_not_called()
-    cursor.close.assert_called_once()
-    connection.close.assert_called_once()
-
-
-@pytest.mark.parametrize("worker_outcome", ["success", "driver", "unexpected", "cancelled"])
-async def test_native_query_cancellation_never_closes_a_running_odbc_handle(registry, worker_outcome):
-    executing, release = threading.Event(), threading.Event()
-    cursor = MagicMock()
-    cursor.description = [("value",)]
-    cursor.fetchmany.return_value = [(1,)]
-
-    def execute(query):
-        executing.set()
-        assert release.wait(5), "The test must release its bounded synthetic ODBC operation."
-        cursor.close.assert_not_called()
-        if worker_outcome != "success":
-            import pyodbc
-            raise {
-                "driver": pyodbc.Error, "unexpected": RuntimeError,
-                "cancelled": asyncio.CancelledError,
-            }[worker_outcome]("synthetic-private-worker-detail")
-
-    cursor.execute.side_effect = execute
-    connection = MagicMock()
-    connection.cursor.return_value = cursor
-    with patch("plugins.nl2sql.plugin.SQLDBClient", return_value=SimpleNamespace(
-        create_connection=AsyncMock(return_value=connection),
-    )):
-        async with AsyncExitStack() as resources:
-            tools = await configured_tools(resources, registry)
-            task = asyncio.create_task(tools["execute_sql_query"].invoke(
-                arguments={"datasource": "sales", "query": "SELECT value FROM sales"}, skip_parsing=True,
-            ))
-            try:
-                assert await asyncio.to_thread(executing.wait, 5)
-                task.cancel("synthetic-caller-cancellation")
-                await asyncio.sleep(0)
-                cursor.close.assert_not_called()
-                connection.close.assert_not_called()
-            finally:
-                release.set()
-            with pytest.raises(asyncio.CancelledError) as raised:
-                await task
-            assert raised.value.args == ("synthetic-caller-cancellation",)
-    cursor.close.assert_called_once()
-    connection.close.assert_called_once()
-
-
-async def test_dax_never_accepts_model_supplied_tokens_and_missing_delegation_fails_closed(registry):
-    async with AsyncExitStack() as resources:
-        tools = await configured_tools(resources, registry)
-        schema = tools["execute_dax_query"].input_model.model_json_schema()
-        assert set(schema["properties"]) == {"datasource", "query"}
-        result = await tools["execute_dax_query"].invoke(
-            arguments={"datasource": "sales", "query": "EVALUATE Sales"}, skip_parsing=True,
-        )
-        assert result.error and "authorization" in result.error
-        registry.get_document.assert_not_awaited()
-
-
-async def test_dax_adapter_keeps_invocation_local_user_token(registry):
-    registry.get_document.return_value = {
-        "id": "sales", "description": "Synthetic", "type": "semantic_model",
-        "organization": "synthetic", "dataset": "dataset", "workspace": "workspace",
-        "tenant_id": "tenant", "client_id": "client",
-    }
-    adapter = SimpleNamespace(execute_restapi_dax_query=AsyncMock(return_value=[{"value": 1}]))
-    with patch("plugins.nl2sql.plugin.SemanticModelClient", return_value=adapter):
-        async with AsyncExitStack() as resources:
-            tools = await configured_tools(resources, registry, identity=ToolIdentity(dax_token="synthetic-token"))
-            result = await tools["execute_dax_query"].invoke(
-                arguments={"datasource": "sales", "query": "EVALUATE Sales"}, skip_parsing=True,
-            )
-    assert result.results == [{"value": 1}]
-    adapter.execute_restapi_dax_query.assert_awaited_once_with(
-        dax_query="EVALUATE Sales", user_token="synthetic-token",
-    )
-
-
-def test_invocation_credentials_cannot_be_checkpointed():
+def test_invocation_credentials_cannot_be_checkpointed_or_rendered():
+    identity = ToolIdentity(call_id="synthetic-call", search_token="synthetic-token")
+    assert "synthetic-token" not in repr(identity)
     with pytest.raises(TypeError, match="cannot be persisted"):
-        pickle.dumps(ToolIdentity(dax_token="synthetic-token"))
+        pickle.dumps(identity)
 
 
-async def test_disabled_tools_do_not_construct_optional_dependencies():
-    with patch("native.tools.nl2sql_tools") as sql:
-        async with AsyncExitStack() as resources:
-            assert await compose_tools(ConfigView({}), ToolIdentity(), resources) == []
-        sql.assert_not_called()
+async def test_disabled_tools_and_obsolete_sql_flag_never_register_direct_sql():
+    async with AsyncExitStack() as resources:
+        assert await compose_tools(ConfigView({}), ToolIdentity(), resources) == []
+        assert await compose_tools(
+            ConfigView({"NL2SQL_ENABLED": True}), ToolIdentity(), resources,
+        ) == []
+    assert "NL2SQL_ENABLED" not in BASE_KEYS
+    assert "NL2SQL_ENABLED" not in TOOL_KEYS
+    root = Path(__file__).resolve().parents[1]
+    for path in (
+        "src/plugins/nl2sql/plugin.py", "src/plugins/nl2sql/sql_validation.py",
+        "src/connectors/sqldbs.py", "src/connectors/fabric.py",
+    ):
+        assert not (root / path).exists()
 
 
 async def test_enabled_tool_missing_configuration_is_not_a_fallback():
@@ -198,34 +50,6 @@ async def test_multimodal_tool_is_optional_and_missing_delegation_does_not_query
         assert [tool.name for tool in tools] == ["multimodal_retrieve"]
         with pytest.raises(ValueError, match="delegated Search"):
             await tools[0].invoke(arguments={"input": "synthetic"}, skip_parsing=True)
-
-
-async def test_native_agent_really_invokes_the_reused_source_tool(registry):
-    class ToolCallingClient(FunctionInvocationLayer, BaseChatClient):
-        def __init__(self):
-            super().__init__()
-            self.calls = 0
-
-        async def _inner_get_response(self, *, messages, stream, options, **kwargs):
-            self.calls += 1
-            if self.calls == 1:
-                return ChatResponse(messages=[Message("assistant", [
-                    Content.from_function_call("synthetic-call", "get_all_datasources_info", arguments={}),
-                ])])
-            assert any(
-                content.type == "function_result" and "sales" in str(content.result)
-                for message in messages for content in message.contents
-            )
-            return ChatResponse(messages=[Message("assistant", ["The configured source is sales."])])
-
-    model = ToolCallingClient()
-    config = fake_config(VALUES, mode="conversational")
-    with patch("native.tools.SourceRegistry", return_value=registry):
-        async with create_agent(config, client=model) as agent:
-            response = await agent.run("List configured data sources.")
-    assert response.text == "The configured source is sales."
-    assert model.calls == 2
-    registry.close.assert_awaited_once()
 
 
 async def test_native_multimodal_adapter_retains_text_images_captions_and_user_authorization():
@@ -255,31 +79,149 @@ async def test_native_multimodal_adapter_retains_text_images_captions_and_user_a
     search.close.assert_awaited_once()
 
 
-async def test_native_audit_uses_current_enabled_settings_without_exporting_sql_or_hmac(registry):
-    async with AsyncExitStack() as resources:
-        tools = await configured_tools(resources, registry, {
-            "AUDIT_EVENTS_ENABLED": True, "AUDIT_HMAC_KEY": "78" * 32,
-            "AUDIT_HMAC_KEY_ID": "synthetic-key-id",
-        })
-        with capture_audit_logs() as capture:
-            await tools["execute_sql_query"].invoke(
-                arguments={"datasource": "sales", "query": "DELETE FROM synthetic-private-table"},
-                skip_parsing=True,
-            )
-    assert {record.event_type for record in capture.records} >= {
-        "tool.invocation.started", "tool.invocation.completed", "grounding.source.rejected",
+@pytest.mark.parametrize("trusted", [
+    ["mcp.example.invalid"], '["mcp.example.invalid"]', "mcp.example.invalid",
+])
+async def test_generic_mcp_registration_uses_parent_configuration_and_request_identity(trusted):
+    captured = {}
+    tool = SimpleNamespace(functions=[object(), object()])
+
+    @asynccontextmanager
+    async def open_tool(**kwargs):
+        captured.update(kwargs)
+        yield tool
+        captured["closed"] = True
+
+    with patch("connectors.mcp_client.open_mcp_tool", open_tool):
+        async with AsyncExitStack() as resources:
+            tools = await compose_tools(ConfigView({
+                "MCP_ENABLED": True, "MCP_APP_ENDPOINT": "https://mcp.example.invalid",
+                "MCP_SERVER_TRANSPORT": "streamable-http", "MCP_CLIENT_TIMEOUT": 90,
+                "MCP_TRUSTED_HOSTS": trusted,
+                "MCP_AUTH_RESOURCE_SCOPE": "api://synthetic-mcp-api/.default",
+            }), ToolIdentity(call_id="synthetic-call", search_token="not-mcp-auth"), resources)
+            assert tools == tool.functions
+    assert captured == {
+        "endpoint": "https://mcp.example.invalid", "transport": "streamable-http",
+        "timeout": 90, "user_context": None, "api_key": None,
+        "auth_resource_scope": "api://synthetic-mcp-api/.default",
+        "foundry_call_id": "synthetic-call", "closed": True,
     }
-    assert all("synthetic-private-table" not in str(vars(record)) for record in capture.records)
+
+
+@pytest.mark.parametrize("trusted", [None, [], '["other.example.invalid"]', "[1]", {}])
+async def test_untrusted_or_invalid_hosts_fail_before_mcp_connection(trusted):
+    with patch("connectors.mcp_client.open_mcp_tool") as open_tool:
+        async with AsyncExitStack() as resources:
+            with pytest.raises(ValueError, match="MCP_TRUSTED_HOSTS"):
+                await compose_tools(ConfigView({
+                    "MCP_ENABLED": True, "MCP_APP_ENDPOINT": "https://mcp.example.invalid",
+                    "MCP_TRUSTED_HOSTS": trusted,
+                }), ToolIdentity(), resources)
+        open_tool.assert_not_called()
+
+
+async def test_source_registry_remains_available_for_non_sql_documents():
+    client = SimpleNamespace(
+        list_documents=AsyncMock(return_value=[{"id": "document-source"}]),
+        get_document=AsyncMock(return_value={"id": "document-source"}),
+        close=AsyncMock(),
+    )
+    with patch("connectors.cosmosdb.CosmosDBClient", return_value=client):
+        registry = SourceRegistry(ConfigView({
+            "DATABASE_ACCOUNT_NAME": "synthetic", "DATABASE_NAME": "sources",
+        }))
+        assert await registry.list_documents("document-sources") == [{"id": "document-source"}]
+        assert await registry.get_document("document-sources", "document-source") == {"id": "document-source"}
+        await registry.close()
+    client.close.assert_awaited_once()
+
+
+async def test_native_audit_preserves_schema_budget_and_sensitive_argument_redaction():
+    async def retrieve(input: str) -> str:
+        """Retrieve a synthetic document."""
+        return "synthetic result"
+
+    config = ConfigView({
+        "AUDIT_EVENTS_ENABLED": True, "AUDIT_HMAC_KEY": "78" * 32,
+        "AUDIT_HMAC_KEY_ID": "synthetic-key-id",
+    })
+    from native.tools import new_audit_context
+    tool = audited_function(retrieve, config, new_audit_context(config))
+    assert set(tool.input_model.model_json_schema()["properties"]) == {"input"}
+    with capture_audit_logs() as capture:
+        for _ in range(20):
+            assert await tool.invoke(
+                arguments={"input": "synthetic-private-question"}, skip_parsing=True,
+            ) == "synthetic result"
+    assert sum(record.event_type == "tool.invocation.started" for record in capture.records) == 16
+    assert sum(record.event_type == "tool.invocation.completed" for record in capture.records) == 16
+    assert all("synthetic-private-question" not in json.dumps(vars(record), default=str) for record in capture.records)
     assert all("78" * 32 not in str(vars(record)) for record in capture.records)
 
 
-async def test_native_tool_set_shares_the_existing_audit_budget(registry):
-    async with AsyncExitStack() as resources:
-        tools = await configured_tools(resources, registry, {
-            "AUDIT_EVENTS_ENABLED": True, "AUDIT_HMAC_KEY": "78" * 32,
-        })
-        with capture_audit_logs() as capture:
-            for _ in range(20):
-                await tools["get_all_datasources_info"].invoke(skip_parsing=True)
-    assert sum(record.event_type == "tool.invocation.started" for record in capture.records) == 16
-    assert sum(record.event_type == "tool.invocation.completed" for record in capture.records) == 16
+async def test_same_native_agent_activates_mcp_after_identity_setup_and_keeps_snapshot_live():
+    from agent_framework import FunctionTool
+    from native.agent import create_agent
+
+    remote = {**BASE, "MCP_ENABLED": False}
+    providers, selections, connections = [], [], []
+
+    def loader(**kwargs):
+        keys = [selector.key_filter for selector in kwargs["selects"]]
+        selections.append(keys)
+        assert "key_vault_options" not in kwargs  # Disabled/bearer mode never resolves API keys.
+        provider = MagicMock()
+        provider.values = {}
+        def refresh():
+            provider.values = {k: v for k, v in remote.items() if k in keys}
+        refresh()
+        provider.refresh.side_effect = refresh
+        provider.items.side_effect = lambda: provider.values.items()
+        provider.keys.side_effect = lambda: provider.values.keys()
+        provider.__getitem__.side_effect = lambda k: provider.values[k]
+        providers.append(provider)
+        return provider
+
+    async def query(source_id: str, question: str) -> str:
+        return "synthetic result"
+    tool = SimpleNamespace(functions=[FunctionTool(name="nl2sql.query", func=query)])
+
+    @asynccontextmanager
+    async def open_tool(**kwargs):
+        connections.append(kwargs)
+        yield tool
+
+    config = await NativeConfig("https://config.example.invalid", None, None, loader).open()
+    snapshot = FunctionalSnapshot.capture((await config.view()).values)
+    assert "MCP_ENABLED" not in snapshot.values
+    # Old serialized snapshots must not pin a stale false or old endpoint.
+    old_snapshot = FunctionalSnapshot(revision=snapshot.revision, values={
+        **snapshot.values, "MCP_ENABLED": False, "MCP_APP_ENDPOINT": "https://old.example.invalid",
+    })
+    client = RecordingClient()
+    try:
+        with patch("connectors.mcp_client.open_mcp_tool", open_tool):
+            async with create_agent(config, client=client, snapshot=old_snapshot) as agent:
+                await agent.run("Before identity setup")
+                assert not connections
+                remote.update({
+                    "MCP_ENABLED": True, "MCP_APP_ENDPOINT": "https://mcp.example.invalid",
+                    "MCP_TRUSTED_HOSTS": ["mcp.example.invalid"],
+                    "MCP_SERVER_TRANSPORT": "streamable-http", "MCP_CLIENT_TIMEOUT": 90,
+                    "MCP_AUTH_RESOURCE_SCOPE": "api://synthetic-mcp-api/.default",
+                })
+                await agent.run("After identity setup")
+                assert len(connections) == 1
+                assert connections[0]["endpoint"] == "https://mcp.example.invalid"
+                assert connections[0]["auth_resource_scope"] == "api://synthetic-mcp-api/.default"
+                assert [t.name for t in client.calls[-1][1]["tools"]] == ["nl2sql.query"]
+                remote["MCP_ENABLED"] = False
+                await agent.run("After disabling")
+                assert len(connections) == 1
+                assert not client.calls[-1][1].get("tools")
+        assert len(selections) == 5 and all("MCP_API_KEY" not in keys for keys in selections)
+    finally:
+        await config.close()
+    assert providers[0].refresh.call_count == 4
+    assert all(provider.close.call_count == 1 for provider in providers)

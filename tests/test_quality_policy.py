@@ -319,6 +319,62 @@ def test_deleted_annotations_and_new_suppressions_fail(tmp_path):
     assert {f["rule"] for f in findings} >= {"annotation-removed", "suppression"}
 
 
+@pytest.mark.parametrize("old,new", [
+    ("def retired(value: str) -> str:\n return value", "other: int = 1"),
+    ("class Identity:\n retired: str\n retained: str",
+     "class Identity:\n retained: str"),
+    ("def retained() -> int:\n def retired(value: int) -> int:\n  return value\n return 1",
+     "def retained() -> int:\n return 1"),
+])
+def test_annotations_of_physically_retired_symbols_can_retire(tmp_path, old, new):
+    before = tree(tmp_path / "old", {"a.py": old})
+    after = tree(tmp_path / "new", {"a.py": new})
+    assert not QUALITY["source_policy"](before, after, {"a": "a"}, {"a"})
+
+
+@pytest.mark.parametrize("files", [
+    {"a.py": "def retired(value):\n return value"},
+    {"a.py": "def renamed(value):\n return value"},
+    {"a.py": "other: int = 1", "b.py": "def renamed(value):\n return value"},
+    {"a.py": "retired = lambda value: value"},
+    {"a.py": "from b import retired", "b.py": "def retired(value):\n return value"},
+    {"a.py": "other: int = 1", "b.py": "lookup = 'retired'"},
+])
+def test_surviving_referenced_and_copied_symbols_cannot_erase_annotations(tmp_path, files):
+    before = tree(tmp_path / "old", {"a.py": "def retired(value: str) -> str:\n return value"})
+    after = tree(tmp_path / "new", files)
+    identities = {name: name for name in after}
+    assert any(f["rule"] == "annotation-removed" for f in
+               QUALITY["source_policy"](before, after, identities, {"a"}))
+
+
+@pytest.mark.parametrize("new", [
+    "class Identity:\n retired = None",
+    "class Identity:\n def initialize(self):\n  self.retired = None",
+    "class Identity:\n def initialize(self, retired):\n  pass",
+])
+def test_surviving_fields_cannot_erase_annotations(tmp_path, new):
+    before = tree(tmp_path / "old", {"a.py": "class Identity:\n retired: str"})
+    after = tree(tmp_path / "new", {"a.py": new})
+    assert any(f["rule"] == "annotation-removed" for f in
+               QUALITY["source_policy"](before, after, {"a": "a"}, {"a"}))
+
+
+def test_only_physically_retired_modules_can_retire_typing_overrides():
+    old = {"tool": {"mypy": {"overrides": [{
+        "module": ["retired", "retained"], "disallow_untyped_defs": True,
+    }]}}}
+    new = {"tool": {"mypy": {"overrides": [{
+        "module": ["retained"], "disallow_untyped_defs": True,
+    }]}}}
+    assert not QUALITY["configuration_changes"](old, new, {"retired"})
+    assert any(f["rule"] == "typing-scope" for f in
+               QUALITY["configuration_changes"](old, new))
+    empty = {"tool": {"mypy": {"overrides": []}}}
+    assert any(f["rule"] == "typing-scope" for f in
+               QUALITY["configuration_changes"](old, empty, {"retired"}))
+
+
 @pytest.mark.parametrize("prefix,decorator", [
     ("import typing", "typing.no_type_check"),
     ("import typing as t", "t.no_type_check"),
@@ -984,15 +1040,12 @@ def test_initial_adoption_activates_only_existing_records_and_preserves_retireme
     assert {
         (handler["module_id"], handler["symbol"])
         for handler in current if key(handler) not in record_keys
-    } == {
-        ("plugins.nl2sql.plugin", "NL2SQLPlugin._bounded_query"),
-    }
-    # The protected gate still fails closed on both stale approvals and the
-    # changed SQL handlers, even if all historical evidence selectors are present.
+    } == set()
+    # Direct SQL's worker is now physically removed, not a broadly caught MCP
+    # fallback. Historical approvals still fail even with synthetic evidence.
     passed = {selector for record in records for selector in record["evidence_tests"]}
     findings = QUALITY["check_exceptions"](current, records, passed)
     assert findings
-    assert any(finding["rule"] == "broad-handler" for finding in findings)
     assert any(finding["rule"] == "unused-exception" for finding in findings)
 
 
