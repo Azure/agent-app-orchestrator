@@ -1,35 +1,69 @@
 # Changelog
 
-## [Unreleased]
+## [v7.0.0] - 2026-11-02
 
 ### Changed
 
-- Consume independent NL2SQL MCP through generic `MCP_ENABLED` registration.
+- **Generic MCP tool discovery.** Register remote tools through `MCP_ENABLED`;
+  MCP is the protocol/server boundary, not the NL2SQL toolset. The orchestrator
+  discovers the server's exposed tools without initializing SQL dependencies.
   `MCP_AUTH_RESOURCE_SCOPE=api://<MCP API client ID>/.default` selects
   request-scoped managed-identity bearer authentication, refreshed before
-  expiry without API-key fallback. Without the scope, external API-key MCP
-  remains supported. Accept `streamable-http` and JSON trusted-host arrays.
-- Refresh generic MCP enablement and connection/auth settings per native
-  invocation, including false-to-true activation after parent identity setup
-  and resumed workflows. Other capability redeployment guards remain unchanged.
-- Preserve MCP schema-version-1 structured query results (source, query and
-  metadata IDs, typed columns, rows and count), with text-only JSON support
-  and explicit tool errors through the official client.
+  expiry without API-key fallback. External API-key MCP remains supported
+  when no resource scope is configured. Accept `streamable-http` and JSON
+  trusted-host arrays.
+- **Invocation-scoped MCP refresh.** Refresh MCP enablement, connection and
+  authentication settings per native invocation, including activation after
+  identity setup and resumed workflows. Other capability redeployment guards,
+  native hosts/modes and SDK pins remain unchanged.
+- **Structured NL2SQL results over MCP.** Preserve schema-version-1 source,
+  query and metadata IDs, typed columns, rows and count, with text-only JSON
+  support and explicit tool errors through the official MCP client.
 
 ### Removed
 
-- **Breaking:** remove direct NL2SQL registration, SQL/Fabric/DAX connectors,
-  SQL validation/plugin/result types, SQL prompt and exclusive ODBC/sqlparse
-  dependencies. No legacy SQL or GPT-RAG MCP fallback is provided.
+- **Breaking direct-SQL retirement.** Remove direct NL2SQL registration,
+  SQL/Fabric/DAX connectors, SQL validation/plugin/result types, SQL prompt
+  and exclusive ODBC/sqlparse dependencies. No legacy SQL or GPT-RAG MCP
+  fallback is provided.
   `NL2SQL_ENABLED`, `NL2SQL_SOURCE_REGISTRY`, `NL2SQL_QUERY_TIMEOUT_SECONDS`,
   `NL2SQL_MAX_ROWS`, `DATASOURCES_CONTAINER`, `NL2SQL_STORAGE_CONTAINER`,
   `SEARCH_TABLES_INDEX_NAME`, `SEARCH_MEASURES_INDEX_NAME`,
   `SEARCH_QUERIES_INDEX_NAME`, `SEARCH_TABLES_INDEX_TOP_K` and
   `SEARCH_QUERIES_INDEX_TOP_K` no longer configure orchestrator SQL.
-  Use MCP `nl2sql.list_sources` and `nl2sql.query`; the server owns approved
-  SQL access and Cosmos vector metadata. Native hosts/modes and SDK pins
-  are unchanged. Coordinated platform resource/identity configuration and
-  central documentation are required before adoption; no release is published.
+
+### Migration and recovery
+
+- **Coordinated MCP adoption.** Adopt the platform manifest's complete component
+  combination and central operator guidance together. Configure `MCP_ENABLED`,
+  `MCP_APP_ENDPOINT`, `MCP_TRUSTED_HOSTS` and the server's authentication
+  settings; move SQL access and Cosmos vector metadata configuration to the MCP
+  server. Applications needing NL2SQL use the server's enabled
+  `nl2sql.list_sources` and `nl2sql.query` tools, not removed orchestrator keys.
+- **Explicit server toolsets.** Set server-side `MCP_TOOLSETS` to `["nl2sql"]`
+  only for applications needing SQL. The default `[]` keeps an authenticated
+  MCP server with no tools and no NL2SQL dependency initialization. Keep
+  application-specific toolsets and resources in the application definition,
+  separate from the reusable foundation. The orchestrator's generic
+  enablement, endpoint, scope, transport and discovery contract is unchanged.
+- **Complete-combination rollback.** Preserve the prior compatible platform
+  manifest, all component pins, configuration, immutable image digests and
+  original state. Restore that complete combination, not only the orchestrator
+  or a mix of old direct-SQL settings and the new MCP server. The preceding
+  orchestrator source release is immutable `v6.0.0`
+  (`8cff5be48d166e3270f874374bd343e7899073ec`); it is not proof of the prior
+  deployed platform pin. No data migration or rollback automation is added.
+
+### Validation
+
+- **Focused consumer contracts.** Maintained MCP client, native tool and native
+  runtime tests cover official in-process MCP discovery/results, scoped bearer
+  authentication and refresh, cleanup, trusted hosts and invocation-time
+  activation. Release adoption also requires the actual main-target PR's
+  required checks and the coordinated manifest's exact integration evidence.
+- **Source-only release scope.** No Azure deployment, live model call, package
+  or image publication, deployed identity/RBAC, private-network or complete
+  application-combination validation is claimed by this component release.
 
 ## [v6.0.0] - 2026-11-01
 
