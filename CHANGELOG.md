@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Managed Foundry knowledge Toolbox.** Use the official `FoundryToolbox`
+  client with request-local Foundry call context. Foundry owns downstream
+  knowledge-source delegation rather than a parallel Search-token path.
+- **Optional native user delegation.** Keep `user_delegated` as the default and
+  allow explicit Hosted `service_identity`. Let sources enforce their supported
+  authorization without a source-type or capability allowlist.
+
+### Fixed
+
+- **Explicit tool failures.** Stop model continuation after failed knowledge
+  retrieval. Surface delegated consent through the native host, reject
+  unavailable delegation at invocation time, and never fall back to another
+  identity or start interactive consent in service mode.
+
+### Migration and recovery
+
+- Adopt the coordinated platform release and its `TOOLBOX_ENDPOINT` binding.
+  Keep UI admission and owner isolation enabled. Authentication-mode changes
+  require coordinated redeployment and new sessions. Roll back the complete
+  platform/component combination rather than one component in isolation.
+
 ## [v7.0.0] - 2026-11-02
 
 ### Changed
