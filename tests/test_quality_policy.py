@@ -645,6 +645,165 @@ def test_only_verified_retirement_can_remove_blocking_scope(policy_repo):
     assert not QUALITY["policy_changes"](root, base, records, candidate, {"b"})
 
 
+@pytest.fixture
+def persistent_retirement_repo(tmp_path):
+    def git(*args):
+        return subprocess.run(
+            ["git", *args], cwd=tmp_path, capture_output=True, text=True, check=True,
+        ).stdout.strip()
+
+    git("init", "--quiet")
+    git("config", "user.name", "Quality fixture")
+    git("config", "user.email", "quality@example.invalid")
+    tree(tmp_path, {"seed.py": "value: int = 1\n", "other.py": "value: int = 2\n"})
+    git("add", ".")
+    git("commit", "--quiet", "-m", "owned source")
+    source = git("rev-parse", "HEAD")
+    records = {
+        "module-surfaces.json": {
+            "schema_version": 1,
+            "entries": [surface_record(name, source_revision=source)
+                        for name in ("seed", "other")],
+        },
+        "typing-scope.json": {"module_ids": ["seed", "other"], "schema_version": 1},
+        "typing-baseline.json": {"entries": [], "schema_version": 1},
+    }
+    quality = tmp_path / ".quality"
+    quality.mkdir()
+    for name, value in records.items():
+        (quality / name).write_text(json.dumps(value))
+    git("add", ".")
+    git("commit", "--quiet", "-m", "inventory owned source")
+    (tmp_path / "src/seed.py").unlink()
+    records["module-surfaces.json"]["entries"] = [
+        entry for entry in records["module-surfaces.json"]["entries"]
+        if entry["id"] != "seed"
+    ]
+    (quality / "module-surfaces.json").write_text(json.dumps(records["module-surfaces.json"]))
+    git("add", ".")
+    git("commit", "--quiet", "-m", "physically remove seed but retain stale explicit scope")
+    base = git("rev-parse", "HEAD")
+    candidate = json.loads(json.dumps(records))
+    candidate["typing-scope.json"]["module_ids"] = ["other"]
+    return tmp_path, git, base, records, candidate
+
+
+def test_persistent_retirement_reproves_deleted_source_and_preserves_live_scope(
+        persistent_retirement_repo):
+    root, _, base, records, candidate = persistent_retirement_repo
+    modules = QUALITY["collect"](root, ["src"])
+    immediate, findings = QUALITY["retired_modules"](modules, modules, records, candidate)
+    assert not immediate and not findings
+    retired, findings = QUALITY["persistent_retired_modules"](
+        root, base, modules, modules, records, candidate)
+    assert retired == {"seed"} and not findings
+    assert not QUALITY["policy_changes"](root, base, records, candidate, retired)
+    scope = set(records["typing-scope.json"]["module_ids"])
+    scope.update(candidate["typing-scope.json"]["module_ids"])
+    scope.difference_update(retired)
+    assert scope == {"other"} == set(modules)
+    assert candidate["module-surfaces.json"] == records["module-surfaces.json"]
+
+
+@pytest.mark.parametrize("location,kind", [
+    ("base", "live"), ("head", "live"), ("base", "copied"), ("head", "copied"),
+])
+def test_persistent_retirement_rejects_live_and_copied_source(
+        persistent_retirement_repo, location, kind):
+    root, git, base, records, candidate = persistent_retirement_repo
+    before = QUALITY["collect"](root, ["src"])
+    name = "seed" if kind == "live" else "renamed"
+    (root / f"src/{name}.py").write_text(
+        "value: int = 99\n" if kind == "live" else "value: int = 1\n")
+    after = QUALITY["collect"](root, ["src"])
+    if location == "base":
+        git("add", ".")
+        git("commit", "--quiet", "-m", "source remains despite missing inventory")
+        base = git("rev-parse", "HEAD")
+        before = after
+    retired, findings = QUALITY["persistent_retired_modules"](
+        root, base, before, after, records, candidate)
+    assert not retired
+    assert {f["rule"] for f in findings} == {"false-retirement"}
+    assert QUALITY["policy_changes"](root, base, records, candidate, retired)
+
+
+def test_persistent_retirement_cannot_use_candidate_only_history(persistent_retirement_repo):
+    root, git, base, records, candidate = persistent_retirement_repo
+    records["typing-scope.json"]["module_ids"].append("ghost")
+    inventory = json.loads(json.dumps(records["module-surfaces.json"]))
+    inventory["entries"].append(surface_record("ghost"))
+    (root / ".quality/module-surfaces.json").write_text(json.dumps(inventory))
+    (root / "src/ghost.py").write_text("value: int = 3\n")
+    git("add", ".")
+    git("commit", "--quiet", "-m", "candidate-only invented retirement evidence")
+    (root / "src/ghost.py").unlink()
+    modules = QUALITY["collect"](root, ["src"])
+    retired, findings = QUALITY["persistent_retired_modules"](
+        root, base, modules, modules, records, candidate)
+    assert retired == {"seed"}
+    assert {f["rule"] for f in findings} == {"retirement-provenance"}
+    assert "ghost" in findings[0]["message"]
+
+
+def test_persistent_retirement_preserves_a_renamed_live_identity(persistent_retirement_repo):
+    root, _, base, records, candidate = persistent_retirement_repo
+    (root / "src/renamed.py").write_text("value: int = 99\n")
+    candidate["module-surfaces.json"]["entries"].append(
+        surface_record("renamed", id="seed"))
+    modules = QUALITY["collect"](root, ["src"])
+    retired, findings = QUALITY["persistent_retired_modules"](
+        root, base, modules, modules, records, candidate)
+    assert not retired and not findings
+    assert not QUALITY["policy_changes"](root, base, records, candidate, retired)
+    assert "seed" in {entry["id"] for entry in candidate["module-surfaces.json"]["entries"]
+                      if entry["typing_status"] == "blocking"}
+
+
+def test_persistent_retirement_missing_git_history_is_analysis_error(
+        persistent_retirement_repo):
+    root, _, _, records, candidate = persistent_retirement_repo
+    modules = QUALITY["collect"](root, ["src"])
+    with pytest.raises(QUALITY["QualityError"], match="git log failed"):
+        QUALITY["persistent_retired_modules"](
+            root, "0" * 40, modules, modules, records, candidate)
+
+
+@pytest.mark.parametrize("source", ["missing", "invalid"])
+def test_persistent_retirement_requires_real_parseable_ancestral_source(
+        persistent_retirement_repo, source):
+    root, git, _, records, candidate = persistent_retirement_repo
+    inventory = json.loads(json.dumps(records["module-surfaces.json"]))
+    inventory["entries"].append(surface_record("seed"))
+    path = root / ".quality/module-surfaces.json"
+    path.write_text(json.dumps(inventory))
+    if source == "invalid":
+        (root / "src/seed.py").write_text("not valid Python ???")
+    git("add", ".")
+    git("commit", "--quiet", "-m", "invalid historical ownership is not retirement proof")
+    path.write_text(json.dumps(records["module-surfaces.json"]))
+    if source == "invalid":
+        (root / "src/seed.py").unlink()
+    git("add", ".")
+    git("commit", "--quiet", "-m", "remove invalid ownership")
+    modules = QUALITY["collect"](root, ["src"])
+    with pytest.raises(QUALITY["QualityError"], match=(
+            "git show failed" if source == "missing" else "Invalid Python in ancestral")):
+        QUALITY["persistent_retired_modules"](
+            root, git("rev-parse", "HEAD"), modules, modules, records, candidate)
+
+
+def test_persistent_retirement_followup_with_clean_scope_needs_no_new_retirement(
+        persistent_retirement_repo):
+    root, _, base, _, candidate = persistent_retirement_repo
+    modules = QUALITY["collect"](root, ["src"])
+    retired, findings = QUALITY["persistent_retired_modules"](
+        root, base, modules, modules, candidate, candidate)
+    assert not retired and not findings
+    assert not QUALITY["policy_changes"](root, base, candidate, candidate, retired)
+    assert candidate["typing-scope.json"]["module_ids"] == ["other"]
+
+
 @pytest.mark.parametrize("mutation,rule", [
     (lambda config: config["tool"]["ruff"]["lint"].update(select=["F821"]), "lint-scope"),
     (lambda config: config["tool"]["ruff"]["lint"].update(ignore=["F822"]), "suppression"),

@@ -1103,6 +1103,59 @@ def retired_modules(before, after, base_records, candidate):
     return retired, findings
 
 
+def persistent_retired_modules(root, base, before, after, base_records, candidate):
+    """Re-prove stale coverage against owned source in protected-base ancestry."""
+    declared = {
+        entry["id"] for records in (base_records, candidate)
+        for entry in records["module-surfaces.json"]["entries"]
+    }
+    pending = set(base_records["typing-scope.json"]["module_ids"]) - declared
+    retired, findings = set(), []
+    if not pending:
+        return retired, findings
+    # Candidate history and arbitrary source_revision claims cannot supply proof.
+    revisions = git(root, "log", "--format=%H", base, "--",
+                    ".quality/module-surfaces.json").splitlines()
+    for revision in revisions:
+        try:
+            inventory = json.loads(git(
+                root, "show", f"{revision}:.quality/module-surfaces.json"))
+            exact_keys(inventory, ("schema_version", "entries"), "historical module surfaces")
+            validate_records(inventory)
+            validate_surfaces(inventory["entries"])
+        except ValueError as exc:
+            raise QualityError("Invalid ancestral retirement inventory") from exc
+        for entry in inventory["entries"]:
+            if entry["id"] not in pending:
+                continue
+            pending.remove(entry["id"])
+            try:
+                text = git(root, "show", f"{revision}:{entry['path']}")
+                tree = ast.parse(text, filename=entry["path"])
+            except SyntaxError as exc:
+                raise QualityError("Invalid Python in ancestral retirement source") from exc
+            fingerprint = syntax(tree)
+            # A historical inventory alone is insufficient: require its real source,
+            # absent under its name/path AND not copied anywhere in base or head.
+            modules = [*before.values(), *after.values()]
+            if (entry["import_name"] in before or entry["import_name"] in after
+                    or any(module["path"] == entry["path"] for module in modules)
+                    or (tree.body and any(
+                        module["fingerprint"] == fingerprint for module in modules))):
+                findings.append(finding(
+                    "false-retirement", entry["path"],
+                    message="Ancestral retirement still has live or copied source"))
+            else:
+                retired.add(entry["id"])
+        if not pending:
+            break
+    for module_id in sorted(pending):
+        findings.append(finding(
+            "retirement-provenance",
+            message=f"No ancestral owned source proves retirement: {module_id}"))
+    return retired, findings
+
+
 def policy_changes(root, base, base_records, candidate, retired=frozenset()):
     """Control maintenance is reviewable; debt inflation and scope erasure are not."""
     findings = []
@@ -1277,6 +1330,11 @@ def main(argv=None):
             before = collect(trusted, policy["runtime_roots"])
             surfaces = records["module-surfaces.json"]["entries"]
             retired, retirement_findings = retired_modules(before, modules, base_records, candidate)
+            if not bootstrap:
+                persisted, persisted_findings = persistent_retired_modules(
+                    root, base, before, modules, base_records, candidate)
+                retired.update(persisted)
+                retirement_findings.extend(persisted_findings)
             historical_surfaces = base_records["module-surfaces.json"]["entries"]
             identities, identity_findings = module_identities(
                 before, modules, [*historical_surfaces, *surfaces], retired)
