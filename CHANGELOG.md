@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [v7.1.0] - 2026-11-02
+
 ### Added
 
 - **Managed Foundry knowledge Toolbox.** Use the official `FoundryToolbox`
