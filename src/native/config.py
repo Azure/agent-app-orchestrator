@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import threading
 from collections.abc import Mapping
 from contextlib import contextmanager
@@ -21,13 +22,13 @@ BASE_KEYS = (
     "MULTIMODAL_ENABLED",
     "AUDIT_EVENTS_ENABLED", "LOG_LEVEL", "APPLICATIONINSIGHTS_CONNECTION_STRING",
     "AZURE_LOG_LEVEL", "AZURE_HTTP_LOG_LEVEL", "AZURE_MONITOR_DISABLE_LOGGING",
-    "RETRIEVAL_AUTH_MODE", "ALLOW_ANONYMOUS",
+    "RETRIEVAL_AUTH_MODE", "ALLOW_ANONYMOUS", "HOSTED_AGENT_AUTH_MODE",
 )
 TOOL_KEYS = {
     "SEARCH_RETRIEVAL_ENABLED": (
         "SEARCH_CONNECTION_ID", "SEARCH_RAG_INDEX_NAME", "SEARCH_RAGINDEX_TOP_K",
     ),
-    "FOUNDRY_IQ_ENABLED": ("KNOWLEDGE_BASE_CONNECTION_ID", "KNOWLEDGE_BASE_NAME"),
+    "FOUNDRY_IQ_ENABLED": ("TOOLBOX_ENDPOINT",),
     "MCP_ENABLED": (
         "MCP_APP_ENDPOINT", "MCP_SERVER_TRANSPORT", "MCP_CLIENT_TIMEOUT",
         "MCP_TRUSTED_HOSTS", "MCP_API_KEY", "MCP_AUTH_RESOURCE_SCOPE",
@@ -46,7 +47,10 @@ TOOL_KEYS = {
 }
 # Secret values are never included in a workflow checkpoint/configuration digest.
 SECRET_KEYS = frozenset({"MCP_API_KEY", "AUDIT_HMAC_KEY"})
-AUTHORIZATION_KEYS = frozenset({"RETRIEVAL_AUTH_MODE", "ALLOW_ANONYMOUS"})
+AUTHORIZATION_KEYS = frozenset({
+    "RETRIEVAL_AUTH_MODE", "ALLOW_ANONYMOUS", "HOSTED_AGENT_AUTH_MODE",
+    "TOOLBOX_ENDPOINT",
+})
 _DYNAMIC_MCP_KEYS = frozenset({"MCP_ENABLED", *TOOL_KEYS["MCP_ENABLED"]})
 _scoped_config: ContextVar["ConfigView | None"] = ContextVar("native_config", default=None)
 
@@ -75,12 +79,14 @@ class RuntimeSettings(BaseModel):
     mode: Literal["conversational", "workflow", "both"] = "conversational"
     project_endpoint: str
     model: str
+    auth_mode: Literal["user_delegated", "service_identity"] = "user_delegated"
+    toolbox_endpoint: str | None = None
 
     @classmethod
     def read(cls, values: Mapping[str, Any], env: Mapping[str, str] | None = None) -> "RuntimeSettings":
         env = os.environ if env is None else env
         structural: dict[str, Any] = {}
-        for key in ("ORCHESTRATION_HOST", "APPLICATION_MODE"):
+        for key in ("ORCHESTRATION_HOST", "APPLICATION_MODE", "HOSTED_AGENT_AUTH_MODE"):
             configured, deployment = values.get(key), env.get(key)
             hosted_publication_override = (
                 key == "APPLICATION_MODE" and configured == "both"
@@ -97,11 +103,25 @@ class RuntimeSettings(BaseModel):
                 str(values.get("AI_FOUNDRY_PROJECT_ENDPOINT") or ""), "AI_FOUNDRY_PROJECT_ENDPOINT"
             ),
             model=str(values.get("CHAT_DEPLOYMENT_NAME") or ""),
+            auth_mode=structural["HOSTED_AGENT_AUTH_MODE"] or "user_delegated",
+            toolbox_endpoint=values.get("TOOLBOX_ENDPOINT") if enabled(values.get("FOUNDRY_IQ_ENABLED", False)) else None,
         )
         if not result.model:
             raise ValueError("CHAT_DEPLOYMENT_NAME is required.")
+        if enabled(values.get("FOUNDRY_IQ_ENABLED", False)) and (
+            not result.toolbox_endpoint or not re.fullmatch(
+                re.escape(result.project_endpoint.rstrip("/")) + r"/toolboxes/[A-Za-z0-9_-]+/mcp\?api-version=v1",
+                result.toolbox_endpoint,
+            )
+        ):
+            raise ValueError("TOOLBOX_ENDPOINT must bind the managed KB toolbox in the configured Foundry project.")
         if result.host == "hosted" and result.mode == "both":
             raise ValueError("Hosted requires one application mode per publication.")
+        if enabled(values.get("ALLOW_ANONYMOUS", False)):
+            raise ValueError("Native runtime requires authenticated user admission; ALLOW_ANONYMOUS=false.")
+        if result.auth_mode == "service_identity":
+            if result.host != "hosted":
+                raise ValueError("service_identity requires ORCHESTRATION_HOST=hosted.")
         return result
 
 
@@ -191,7 +211,6 @@ class NativeConfig:
     async def open(self) -> "NativeConfig":
         self.providers.append(await self._load(BASE_KEYS))
         values = dict(self.providers[0])
-        self.settings = RuntimeSettings.read(values)
         for flag, keys in TOOL_KEYS.items():
             if flag == "MCP_ENABLED":
                 # This capability is read fresh per invocation after parent
@@ -203,6 +222,9 @@ class NativeConfig:
         self._flags = {
             flag: enabled(values.get(flag, False)) for flag in TOOL_KEYS if flag != "MCP_ENABLED"
         }
+        self.settings = RuntimeSettings.read({
+            key: value for provider in self.providers for key, value in provider.items()
+        })
         return self
 
     async def view(self, snapshot: FunctionalSnapshot | None = None) -> ConfigView:
@@ -210,11 +232,15 @@ class NativeConfig:
 
     def _view(self, snapshot: FunctionalSnapshot | None) -> ConfigView:
         with self._lock:
+            settings = self.settings
+            if settings is None:
+                raise ValueError("Native configuration must be opened before reading settings.")
             for provider in self.providers:
                 provider.refresh()
             values = {key: value for provider in self.providers for key, value in provider.items()}
-            if RuntimeSettings.read(values) != self.settings:
+            if RuntimeSettings.read(values) != settings:
                 raise ValueError("Structural runtime configuration changed; redeploy.")
+            values["HOSTED_AGENT_AUTH_MODE"] = settings.auth_mode
             if any(enabled(values.get(k, False)) != v for k, v in self._flags.items()):
                 raise ValueError("Enabled capabilities changed; redeploy.")
             mcp_provider = self._load_provider(tuple(

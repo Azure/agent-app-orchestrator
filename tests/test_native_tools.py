@@ -12,7 +12,7 @@ import pytest
 from native.config import BASE_KEYS, TOOL_KEYS, ConfigView, FunctionalSnapshot, NativeConfig
 from native.tools import SourceRegistry, ToolIdentity, audited_function, compose_tools
 from test_audit_emitter import capture_audit_logs
-from test_native_runtime import BASE, RecordingClient
+from test_native_runtime import BASE, SERVICE, RecordingClient
 
 
 def test_invocation_credentials_cannot_be_checkpointed_or_rendered():
@@ -42,6 +42,36 @@ async def test_enabled_tool_missing_configuration_is_not_a_fallback():
     async with AsyncExitStack() as resources:
         with pytest.raises(ValueError, match="SEARCH_CONNECTION_ID"):
             await compose_tools(ConfigView({"SEARCH_RETRIEVAL_ENABLED": True}), ToolIdentity(), resources)
+
+
+async def test_kb_is_not_a_standalone_model_mcp_tool_and_service_rejects_user_assertions():
+    async with AsyncExitStack() as resources:
+        tools = await compose_tools(ConfigView({
+            **SERVICE, "FOUNDRY_IQ_ENABLED": True,
+            "TOOLBOX_ENDPOINT": "https://project.example.invalid/toolboxes/common/mcp?api-version=v1",
+        }), ToolIdentity(call_id="platform-service-call"), resources)
+    assert tools == []  # Managed KB functions belong to the official FoundryToolbox lifecycle.
+    async with AsyncExitStack() as resources:
+        with pytest.raises(ValueError, match="cannot accept delegated"):
+            await compose_tools(ConfigView(SERVICE), ToolIdentity(search_token="synthetic-user-token"), resources)
+
+
+@pytest.mark.parametrize("override", [
+    {"WORK_IQ_ENABLED": True}, {"FOUNDRY_IQ_INGESTION_PERMISSION_OPTIONS": ["rbacScope"]},
+    {"FOUNDRY_IQ_IS_ADLS_GEN2": True}, {"FOUNDRY_IQ_PATTERN": "searchIndex"},
+])
+async def test_service_source_type_does_not_block_tool_composition(override):
+    async with AsyncExitStack() as resources:
+        assert await compose_tools(ConfigView({**SERVICE, **override}), ToolIdentity(), resources) == []
+
+
+async def test_service_search_capability_registers_without_a_blob_source():
+    async with AsyncExitStack() as resources:
+        tools = await compose_tools(ConfigView({
+            **SERVICE, "SEARCH_RETRIEVAL_ENABLED": True,
+            "SEARCH_CONNECTION_ID": "project-search", "SEARCH_RAG_INDEX_NAME": "existing-index",
+        }), ToolIdentity(), resources)
+    assert len(tools) == 1
 
 
 async def test_multimodal_tool_is_optional_and_missing_delegation_does_not_query_search():
@@ -160,11 +190,12 @@ async def test_native_audit_preserves_schema_budget_and_sensitive_argument_redac
     assert all("78" * 32 not in str(vars(record)) for record in capture.records)
 
 
-async def test_same_native_agent_activates_mcp_after_identity_setup_and_keeps_snapshot_live():
+@pytest.mark.parametrize("auth_mode", ["user_delegated", "service_identity"])
+async def test_same_native_agent_activates_mcp_after_identity_setup_and_keeps_snapshot_live(auth_mode):
     from agent_framework import FunctionTool
     from native.agent import create_agent
 
-    remote = {**BASE, "MCP_ENABLED": False}
+    remote = {**BASE, "HOSTED_AGENT_AUTH_MODE": auth_mode, "MCP_ENABLED": False}
     providers, selections, connections = [], [], []
 
     def loader(**kwargs):
