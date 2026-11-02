@@ -216,6 +216,9 @@ immediate PR base. They stay covered in subsequent PRs, including unchanged
 moves. Imported diagnostics outside that declared scope remain visible but
 nonblocking. Source-policy review includes `typing.no_type_check` and aliases,
 not just comment suppressions. Malformed tool diagnostics are analysis errors.
+Annotation ownership can retire only for physically absent, unreferenced symbols,
+not surviving bindings or renamed copies with erased annotations. Typing overrides
+can retire only for modules independently verified as physically removed.
 The initial debt baseline is empty. Debt is matched by individual source,
 symbol, diagnostic and multiplicity, not totals. Unambiguous unchanged moves
 retain identity; ambiguous moves/deletions require review.

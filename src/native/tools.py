@@ -1,6 +1,7 @@
-"""Optional tool composition, reusing NL2SQL's catalog, guards and SQL/Fabric adapters."""
+"""Optional native retrieval and request-scoped remote MCP tool composition."""
 
 import functools
+import json
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from typing import Any
@@ -18,7 +19,6 @@ class ToolIdentity:
     """Invocation-local credentials; never include in a business input/checkpoint."""
 
     call_id: str | None = field(default=None, repr=False)
-    dax_token: str | None = field(default=None, repr=False)
     search_token: str | None = field(default=None, repr=False)
 
     def __reduce__(self) -> Any:
@@ -33,11 +33,9 @@ def required(config: ConfigView, key: str) -> str:
 
 
 class SourceRegistry:
-    """The supported existing Cosmos datasource registry, owned only by NL2SQL."""
+    """Shared Cosmos source documents; SQL catalogs are owned by the MCP server."""
 
     def __init__(self, config: ConfigView):
-        if required(config, "NL2SQL_SOURCE_REGISTRY") != "cosmos":
-            raise ValueError("NL2SQL_SOURCE_REGISTRY supports only the existing cosmos catalog.")
         required(config, "DATABASE_ACCOUNT_NAME")
         required(config, "DATABASE_NAME")
         self.config = config
@@ -62,7 +60,7 @@ class SourceRegistry:
 
 
 class MetadataSearch:
-    """Metadata-only Search adapter. Listing SQL sources never constructs it."""
+    """Shared Search adapter for non-SQL retrieval."""
 
     def __init__(self, config: ConfigView):
         self.config = config
@@ -137,50 +135,10 @@ def audited_function(method: Any, config: ConfigView, audit_context: Any = None)
                     method.__name__, lambda: method(*args, **kwargs),
                     tool_kind="in_process", sensitive_arguments=kwargs, emitter=emitter,
                 )
-                if kwargs.get("datasource"):
-                    emitter.emit_source(
-                        selected=not getattr(result, "error", None),
-                        source_type="nl2sql_datasource", source_reference=kwargs["datasource"],
-                    )
                 return result
             finally:
                 end_audit_request(token)
     return FunctionTool(name=method.__name__, func=invoke)
-
-
-async def nl2sql_tools(
-    config: ConfigView, identity: ToolIdentity, resources: AsyncExitStack, audit_context: Any = None,
-) -> list[FunctionTool]:
-    from azure.identity.aio import DefaultAzureCredential
-    from plugins.nl2sql.plugin import NL2SQLPlugin
-    from plugins.nl2sql.nl2sql_types import ExecuteQueryResult
-
-    credential = await resources.enter_async_context(DefaultAzureCredential())
-    view = ConfigView(config.values, config.credential, credential)
-    registry = SourceRegistry(view)
-    resources.push_async_callback(registry.close)
-    search = MetadataSearch(view)
-    resources.push_async_callback(search.close)
-    plugin = NL2SQLPlugin(
-        config=view, source_registry=registry, search=search, model=Embeddings(view),
-        query_timeout_seconds=config.get("NL2SQL_QUERY_TIMEOUT_SECONDS", 30, type=int),
-        max_rows=config.get("NL2SQL_MAX_ROWS", 1000, type=int),
-    )
-    audit_context = audit_context if audit_context is not None else new_audit_context(config)
-
-    async def execute_dax_query(datasource: str, query: str) -> ExecuteQueryResult:
-        """Query a configured semantic model using invocation-local delegated authorization."""
-        if not identity.dax_token:
-            return ExecuteQueryResult(error="Delegated DAX authorization is unavailable for this invocation.")
-        return await plugin.execute_dax_query(datasource, query, identity.dax_token)
-
-    return [
-        audited_function(method, view, audit_context) for method in (
-            plugin.get_all_datasources_info, plugin.get_all_tables_info, plugin.get_schema_info,
-            plugin.tables_retrieval, plugin.measures_retrieval, plugin.queries_retrieval,
-            plugin.validate_sql_query, plugin.execute_sql_query, execute_dax_query,
-        )
-    ]
 
 
 def multimodal_tool(config: ConfigView, identity: ToolIdentity, audit_context: Any = None) -> FunctionTool:
@@ -228,8 +186,6 @@ async def compose_tools(
 ) -> list[Any]:
     tools: list[Any] = []
     audit_context = new_audit_context(config)
-    if enabled(config.get("NL2SQL_ENABLED", False, type=None)):
-        tools.extend(await nl2sql_tools(config, identity, resources, audit_context))
     if enabled(config.get("SEARCH_RETRIEVAL_ENABLED", False, type=None)):
         tools.append(FoundryChatClient.get_azure_ai_search_tool(
             index_connection_id=required(config, "SEARCH_CONNECTION_ID"),
@@ -249,13 +205,27 @@ async def compose_tools(
         from connectors.mcp_client import open_mcp_tool
 
         endpoint = https_endpoint(required(config, "MCP_APP_ENDPOINT"), "MCP_APP_ENDPOINT")
-        trusted = {s.strip().lower() for s in required(config, "MCP_TRUSTED_HOSTS").split(",")}
+        raw_trusted = config.get("MCP_TRUSTED_HOSTS", type=None)
+        if isinstance(raw_trusted, str):
+            raw_trusted = (
+                json.loads(raw_trusted) if raw_trusted.lstrip().startswith("[")
+                else raw_trusted.split(",")
+            )
+        if not isinstance(raw_trusted, list) or not raw_trusted or any(
+            not isinstance(host, str) or not host.strip() for host in raw_trusted
+        ):
+            raise ValueError("MCP_TRUSTED_HOSTS requires a non-empty hostname list.")
+        trusted = {host.strip().lower() for host in raw_trusted}
         if urlsplit(endpoint).hostname not in trusted:
             raise ValueError("MCP_APP_ENDPOINT is not in MCP_TRUSTED_HOSTS.")
-        tools.append(await resources.enter_async_context(open_mcp_tool(
+        mcp_tool = await resources.enter_async_context(open_mcp_tool(
             endpoint=endpoint, transport=config.get("MCP_SERVER_TRANSPORT", "streamable_http"),
             timeout=config.get("MCP_CLIENT_TIMEOUT", 30, type=int),
             user_context=None, api_key=config.get("MCP_API_KEY"),
+            auth_resource_scope=config.get("MCP_AUTH_RESOURCE_SCOPE"),
             foundry_call_id=identity.call_id,
-        )))
+        ))
+        # The invocation's resource stack owns the connection. Give MAF the
+        # discovered functions, not a context manager retained by the Agent.
+        tools.extend(mcp_tool.functions)
     return tools

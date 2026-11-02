@@ -6,6 +6,7 @@ import argparse
 import ast
 from collections import Counter, deque
 import configparser
+import copy
 import graphlib
 import hashlib
 import importlib.metadata
@@ -820,33 +821,96 @@ def suppressions(module):
     return result
 
 
-def annotations(module):
-    result = set()
+def annotation_sites(module):
+    result = {}
     for node in ast.walk(module["tree"]):
         symbol = symbol_at(module, getattr(node, "lineno", 0))
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             args = [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
             args += [a for a in (node.args.vararg, node.args.kwarg) if a]
-            result.update((symbol, a.arg) for a in args if a.annotation)
+            result.update(((symbol, a.arg), node) for a in args if a.annotation)
             if node.returns:
-                result.add((symbol, "<return>"))
+                result[symbol, "<return>"] = node
         elif isinstance(node, ast.AnnAssign):
-            result.add((symbol, ast.dump(node.target)))
+            result[symbol, ast.dump(node.target)] = node
     return result
+
+
+def annotations(module):
+    return set(annotation_sites(module))
+
+
+def function_implementation(node):
+    """Match renamed copies even when their type annotations have been erased."""
+    class WithoutAnnotations(ast.NodeTransformer):
+        def visit_arg(self, value):
+            value.annotation = None
+            return value
+
+        def visit_FunctionDef(self, value):
+            self.generic_visit(value)
+            value.returns = None
+            return value
+
+        visit_AsyncFunctionDef = visit_FunctionDef
+
+        def visit_AnnAssign(self, value):
+            return ast.Assign(targets=[value.target],
+                              value=value.value or ast.Constant(value=None))
+
+    value = WithoutAnnotations().visit(copy.deepcopy(node))
+    value.name = "<function>"
+    return syntax(value)
+
+
+def live_symbol_inventory(modules):
+    names, implementations = set(), set()
+    for module in modules.values():
+        for node in ast.walk(module["tree"]):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                names.add(node.name)
+                if not isinstance(node, ast.ClassDef):
+                    implementations.add(function_implementation(node))
+            elif isinstance(node, ast.Name):
+                names.add(node.id)
+            elif isinstance(node, ast.arg):
+                names.add(node.arg)
+            elif isinstance(node, ast.Attribute):
+                names.add(node.attr)
+            elif isinstance(node, ast.alias):
+                names.add(node.asname or node.name.rsplit(".", 1)[-1])
+            elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+                names.add(node.value)
+    return names, implementations
+
+
+def physically_retired_annotation(node, names, implementations):
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return (node.name not in names
+                and function_implementation(node) not in implementations)
+    if isinstance(node.target, ast.Name):
+        return node.target.id not in names
+    if isinstance(node.target, ast.Attribute):
+        return node.target.attr not in names
+    return False
 
 
 def source_policy(before, after, identities, scope, surfaces=()):
     findings = []
     stable = {entry["id"]: entry["import_name"] for entry in surfaces}
+    names, implementations = live_symbol_inventory(after)
     for name, module in after.items():
         old = before.get(stable.get(identities[name], identities[name]))
         inherited = suppressions(old) if old else Counter()
         if suppressions(module) - inherited:
             findings.append(finding("suppression", module["path"],
                                     message="New or broadened suppression requires protected policy review"))
-        if old and identities[name] in scope and annotations(old) - annotations(module):
-            findings.append(finding("annotation-removed", module["path"],
-                                    message="Covered annotations cannot be silently removed"))
+        if old and identities[name] in scope:
+            sites = annotation_sites(old)
+            if any(not physically_retired_annotation(sites[site], names, implementations)
+                   for site in sites.keys() - annotations(module)):
+                findings.append(finding("annotation-removed", module["path"],
+                                        message="Surviving or copied covered symbols cannot lose annotations"))
     return findings
 
 
@@ -1063,7 +1127,7 @@ def policy_changes(root, base, base_records, candidate, retired=frozenset()):
     return findings
 
 
-def configuration_changes(before, after):
+def configuration_changes(before, after, retired=frozenset()):
     """Permit tool maintenance, not widened suppression or disabled analysis."""
     found = []
     old = before.get("tool", {})
@@ -1091,7 +1155,8 @@ def configuration_changes(before, after):
     if new_mypy.get("follow_imports", "normal") != "normal":
         found.append(finding("typing-scope", "pyproject.toml", message="Imported source must be analyzed"))
     for override in old_mypy.get("overrides", []):
-        if not any(set(override.get("module", [])) <= set(item.get("module", []))
+        covered = set(override.get("module", [])) - set(retired)
+        if covered and not any(covered <= set(item.get("module", []))
                    and all(item.get(key) == value for key, value in override.items() if key != "module")
                    for item in new_mypy.get("overrides", [])):
             found.append(finding("typing-scope", "pyproject.toml", message="Covered typing override removed"))
@@ -1257,7 +1322,11 @@ def main(argv=None):
                                 message="No protected base policy exists. Bootstrap requires maintainer review and administrator activation."))
                         else:
                             found.extend(policy_changes(root, base, base_records, candidate, retired))
-                            found.extend(configuration_changes(base_config, head_config))
+                            retired_names = {
+                                entry["import_name"] for entry in historical_surfaces
+                                if entry["id"] in retired}
+                            found.extend(configuration_changes(
+                                base_config, head_config, retired_names))
                         found.extend(identity_findings)
                         found.extend(surface_findings(candidate["module-surfaces.json"]["entries"],
                                                       modules, identities, scope))

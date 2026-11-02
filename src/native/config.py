@@ -18,28 +18,19 @@ BASE_KEYS = (
     "ORCHESTRATION_HOST", "APPLICATION_MODE", "AI_FOUNDRY_PROJECT_ENDPOINT",
     "CHAT_DEPLOYMENT_NAME", "CHAT_TEMPERATURE", "CHAT_OUTPUT_TOKENS",
     "SEARCH_RETRIEVAL_ENABLED", "FOUNDRY_IQ_ENABLED", "MCP_ENABLED",
-    "NL2SQL_ENABLED", "MULTIMODAL_ENABLED",
+    "MULTIMODAL_ENABLED",
     "AUDIT_EVENTS_ENABLED", "LOG_LEVEL", "APPLICATIONINSIGHTS_CONNECTION_STRING",
     "AZURE_LOG_LEVEL", "AZURE_HTTP_LOG_LEVEL", "AZURE_MONITOR_DISABLE_LOGGING",
     "RETRIEVAL_AUTH_MODE", "ALLOW_ANONYMOUS",
 )
 TOOL_KEYS = {
-    "NL2SQL_ENABLED": (
-        "NL2SQL_SOURCE_REGISTRY", "DATABASE_ACCOUNT_NAME", "DATABASE_NAME",
-        "DATASOURCES_CONTAINER", "SEARCH_SERVICE_QUERY_ENDPOINT", "SEARCH_SERVICE_NAME",
-        "SEARCH_API_VERSION", "SEARCH_TABLES_INDEX_NAME", "SEARCH_MEASURES_INDEX_NAME",
-        "SEARCH_QUERIES_INDEX_NAME", "SEARCH_TABLES_INDEX_TOP_K", "SEARCH_QUERIES_INDEX_TOP_K",
-        "SEARCH_APPROACH", "SEARCH_USE_SEMANTIC", "SEARCH_SEMANTIC_SEARCH_CONFIG",
-        "AI_FOUNDRY_ACCOUNT_ENDPOINT", "EMBEDDING_DEPLOYMENT_NAME", "OPENAI_API_VERSION",
-        "NL2SQL_QUERY_TIMEOUT_SECONDS", "NL2SQL_MAX_ROWS", "KEY_VAULT_URI",
-    ),
     "SEARCH_RETRIEVAL_ENABLED": (
         "SEARCH_CONNECTION_ID", "SEARCH_RAG_INDEX_NAME", "SEARCH_RAGINDEX_TOP_K",
     ),
     "FOUNDRY_IQ_ENABLED": ("KNOWLEDGE_BASE_CONNECTION_ID", "KNOWLEDGE_BASE_NAME"),
     "MCP_ENABLED": (
         "MCP_APP_ENDPOINT", "MCP_SERVER_TRANSPORT", "MCP_CLIENT_TIMEOUT",
-        "MCP_TRUSTED_HOSTS", "MCP_API_KEY",
+        "MCP_TRUSTED_HOSTS", "MCP_API_KEY", "MCP_AUTH_RESOURCE_SCOPE",
     ),
     "MULTIMODAL_ENABLED": (
         "SEARCH_SERVICE_QUERY_ENDPOINT", "SEARCH_SERVICE_NAME", "SEARCH_RAG_INDEX_NAME",
@@ -56,6 +47,7 @@ TOOL_KEYS = {
 # Secret values are never included in a workflow checkpoint/configuration digest.
 SECRET_KEYS = frozenset({"MCP_API_KEY", "AUDIT_HMAC_KEY"})
 AUTHORIZATION_KEYS = frozenset({"RETRIEVAL_AUTH_MODE", "ALLOW_ANONYMOUS"})
+_DYNAMIC_MCP_KEYS = frozenset({"MCP_ENABLED", *TOOL_KEYS["MCP_ENABLED"]})
 _scoped_config: ContextVar["ConfigView | None"] = ContextVar("native_config", default=None)
 
 
@@ -122,7 +114,7 @@ class FunctionalSnapshot(BaseModel):
     def capture(cls, values: Mapping[str, Any]) -> "FunctionalSnapshot":
         safe = {
             key: value for key, value in values.items()
-            if key not in SECRET_KEYS | AUTHORIZATION_KEYS
+            if key not in SECRET_KEYS | AUTHORIZATION_KEYS | _DYNAMIC_MCP_KEYS
             and key not in ("ORCHESTRATION_HOST", "APPLICATION_MODE")
         }
         payload = json.dumps(safe, sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -176,6 +168,12 @@ class NativeConfig:
         self._lock = threading.Lock()
 
     async def _load(self, keys: tuple[str, ...], secrets: bool = False) -> Any:
+        kwargs: dict[str, Any] = {"keys": keys, "secrets": secrets}
+        def load_selected() -> Any:
+            return self._load_provider(**kwargs)
+        return await asyncio.to_thread(load_selected)
+
+    def _load_provider(self, keys: tuple[str, ...], secrets: bool = False) -> Any:
         from azure.appconfiguration.provider import AzureAppConfigurationKeyVaultOptions, SettingSelector, load
 
         kwargs: dict[str, Any] = {
@@ -188,19 +186,23 @@ class NativeConfig:
             kwargs["key_vault_options"] = AzureAppConfigurationKeyVaultOptions(credential=self.credential)
         # The synchronous provider is intentional: DTS workflow activities may
         # execute on different event loops. Never share an aio transport between them.
-        def load_selected() -> Any:
-            return (self.loader or load)(**kwargs)
-        return await asyncio.to_thread(load_selected)
+        return (self.loader or load)(**kwargs)
 
     async def open(self) -> "NativeConfig":
         self.providers.append(await self._load(BASE_KEYS))
         values = dict(self.providers[0])
         self.settings = RuntimeSettings.read(values)
         for flag, keys in TOOL_KEYS.items():
+            if flag == "MCP_ENABLED":
+                # This capability is read fresh per invocation after parent
+                # identity setup, not pinned by startup or the refresh timer.
+                continue
             if enabled(values.get(flag, False)):
                 self.providers.append(await self._load(keys, bool(SECRET_KEYS.intersection(keys))))
-        # Capability composition is structural; changing enabled flags needs a new publication.
-        self._flags = {flag: enabled(values.get(flag, False)) for flag in TOOL_KEYS}
+        # Unrelated capability composition remains structural; MCP stays live.
+        self._flags = {
+            flag: enabled(values.get(flag, False)) for flag in TOOL_KEYS if flag != "MCP_ENABLED"
+        }
         return self
 
     async def view(self, snapshot: FunctionalSnapshot | None = None) -> ConfigView:
@@ -215,11 +217,32 @@ class NativeConfig:
                 raise ValueError("Structural runtime configuration changed; redeploy.")
             if any(enabled(values.get(k, False)) != v for k, v in self._flags.items()):
                 raise ValueError("Enabled capabilities changed; redeploy.")
-            if snapshot is not None:
-                # Secrets remain current and invocation-local; functional parameters stay with this run.
+            mcp_provider = self._load_provider(tuple(
+                key for key in ("MCP_ENABLED", *TOOL_KEYS["MCP_ENABLED"]) if key != "MCP_API_KEY"
+            ))
+            try:
+                # Public refresh() is throttled. A selected, request-owned
+                # provider guarantees the next invocation reads publication
+                # enablement, host list, endpoint and resource scope together.
                 values = {
-                    **snapshot.values,
-                    **{k: v for k, v in values.items() if k in SECRET_KEYS | AUTHORIZATION_KEYS},
+                    **{k: v for k, v in values.items() if k not in _DYNAMIC_MCP_KEYS},
+                    **dict(mcp_provider),
+                }
+            finally:
+                mcp_provider.close()
+            if enabled(values.get("MCP_ENABLED", False)) and values.get("MCP_AUTH_RESOURCE_SCOPE") is None:
+                # Resolve external API-key references only for the active consumer.
+                # Bearer mode must not depend on a stale/unavailable API key.
+                api_key_provider = self._load_provider(("MCP_API_KEY",), secrets=True)
+                try:
+                    values.update(dict(api_key_provider))
+                finally:
+                    api_key_provider.close()
+            if snapshot is not None:
+                # MCP and authorization stay live; other functional parameters stay with this run.
+                values = {
+                    **{k: v for k, v in snapshot.values.items() if k not in _DYNAMIC_MCP_KEYS},
+                    **{k: v for k, v in values.items() if k in SECRET_KEYS | AUTHORIZATION_KEYS | _DYNAMIC_MCP_KEYS},
                 }
             return ConfigView(values, self.sync_credential, self.credential)
 
