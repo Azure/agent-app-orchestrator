@@ -152,7 +152,10 @@ def multimodal_tool(config: ConfigView, identity: ToolIdentity, audit_context: A
         from azure.identity.aio import DefaultAzureCredential
 
         if not identity.search_token:
-            raise ValueError("Multimodal retrieval requires invocation-local delegated Search authorization.")
+            raise ValueError(
+                "Multimodal retrieval requires invocation-local delegated Search authorization (OBO). "
+                "Enable user delegation for this application before using this tool."
+            )
         delegated_token = identity.search_token
 
         class AuthorizedMultimodal(RetrievalPlugin):
@@ -184,6 +187,8 @@ def multimodal_tool(config: ConfigView, identity: ToolIdentity, audit_context: A
 async def compose_tools(
     config: ConfigView, identity: ToolIdentity, resources: AsyncExitStack,
 ) -> list[Any]:
+    if config.get("HOSTED_AGENT_AUTH_MODE", "user_delegated") == "service_identity" and identity.search_token:
+        raise ValueError("service_identity cannot accept delegated Search credentials or use an OBO fallback.")
     tools: list[Any] = []
     audit_context = new_audit_context(config)
     if enabled(config.get("SEARCH_RETRIEVAL_ENABLED", False, type=None)):
@@ -194,13 +199,6 @@ async def compose_tools(
         ))
     if enabled(config.get("MULTIMODAL_ENABLED", False, type=None)):
         tools.append(multimodal_tool(config, identity, audit_context))
-    if enabled(config.get("FOUNDRY_IQ_ENABLED", False, type=None)):
-        # Provisioning owns the KB/Toolbox connection, source grants and source auth.
-        # A connection ID is never invented from a user or request metadata.
-        tools.append(FoundryChatClient.get_mcp_tool(
-            name="foundry-iq", project_connection_id=required(config, "KNOWLEDGE_BASE_CONNECTION_ID"),
-            approval_mode="never_require",
-        ))
     if enabled(config.get("MCP_ENABLED", False, type=None)):
         from connectors.mcp_client import open_mcp_tool
 

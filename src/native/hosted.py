@@ -33,6 +33,11 @@ async def parse_workflow_turn(request: HostedResponseRequest) -> WorkflowTurn:
 def build_server(config: NativeConfig, observability_config: ConfigView | None = None) -> ResponsesHostServer:
     if config.settings is None or config.settings.host != "hosted":
         raise ValueError("The Hosted entrypoint requires ORCHESTRATION_HOST=hosted.")
+    auth_mode = config.settings.auth_mode
+
+    def identity_provider() -> Any:
+        return hosted_identity(auth_mode)
+
     # Let the native host configure its own telemetry once, using scoped settings.
     observability: dict[str, Any] = {}
     if observability_config is not None:
@@ -40,9 +45,12 @@ def build_server(config: NativeConfig, observability_config: ConfigView | None =
             "applicationinsights_connection_string": observability_config.get("APPLICATIONINSIGHTS_CONNECTION_STRING"),
             "log_level": observability_config.get("LOG_LEVEL", "INFO").lower(),
         }
+    if auth_mode == "service_identity":
+        # Service mode reports missing delegation instead of starting user consent.
+        observability["allowed_oauth_consent_origins"] = []
     if config.settings.mode == "conversational":
         return ResponsesHostServer(
-            agent=lambda: create_agent(config, identity_provider=hosted_identity),
+            agent=lambda: create_agent(config, identity_provider=identity_provider),
             history_source="agent_server",
             **observability,
         )
@@ -51,8 +59,8 @@ def build_server(config: NativeConfig, observability_config: ConfigView | None =
 
     async def workflow_factory(request: HostedResponseRequest) -> Workflow:
         # Called within each native request; graph IDs are immutable across turns.
-        hosted_identity()
-        return build_workflow(config, agent_factory(config, hosted_identity))
+        identity_provider()
+        return build_workflow(config, agent_factory(config, identity_provider))
 
     return ResponsesHostServer(
         workflow=workflow_factory, parse_response=parse_workflow_turn,

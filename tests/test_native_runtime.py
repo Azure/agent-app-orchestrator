@@ -26,6 +26,10 @@ BASE = {
     "AI_FOUNDRY_PROJECT_ENDPOINT": "https://project.example.invalid",
     "CHAT_DEPLOYMENT_NAME": "model",
 }
+SERVICE = {
+    "HOSTED_AGENT_AUTH_MODE": "service_identity",
+    "RETRIEVAL_AUTH_MODE": "native_search", "ALLOW_ANONYMOUS": False,
+}
 
 
 class RecordingClient(BaseChatClient):
@@ -81,6 +85,95 @@ def test_mode_default_and_deployment_contradictions():
     assert RuntimeSettings.read(BASE, {}).mode == "conversational"
     with pytest.raises(ValueError, match="Contradictory"):
         RuntimeSettings.read(BASE, {"ORCHESTRATION_HOST": "container_apps"})
+
+
+def test_default_obo_and_explicit_service_mode_are_structural():
+    assert RuntimeSettings.read(BASE, {}).auth_mode == "user_delegated"
+    assert RuntimeSettings.read({**BASE, **SERVICE}, {}).auth_mode == "service_identity"
+    with pytest.raises(ValueError, match="Contradictory"):
+        RuntimeSettings.read(
+            {**BASE, **SERVICE}, {"HOSTED_AGENT_AUTH_MODE": "user_delegated"},
+        )
+    with pytest.raises(ValueError, match="requires ORCHESTRATION_HOST=hosted"):
+        RuntimeSettings.read({**BASE, **SERVICE, "ORCHESTRATION_HOST": "container_apps"}, {})
+
+
+@pytest.mark.parametrize("override", [
+    {"HOSTED_AGENT_AUTH_MODE": "automatic"},
+    {"ALLOW_ANONYMOUS": True},
+])
+def test_service_configuration_retains_authentication_guards(override):
+    with pytest.raises(ValueError):
+        RuntimeSettings.read({**BASE, **SERVICE, **override}, {})
+
+
+@pytest.mark.parametrize("override", [
+    {},
+    {"FOUNDRY_IQ_INGESTION_PERMISSION_OPTIONS": None},
+    {"FOUNDRY_IQ_INGESTION_PERMISSION_OPTIONS": ["rbacScope"]},
+    {"FOUNDRY_IQ_IS_ADLS_GEN2": True}, {"FOUNDRY_IQ_PATTERN": "searchIndex"},
+    {"WORK_IQ_ENABLED": True}, {"MCP_ENABLED": True}, {"MULTIMODAL_ENABLED": True},
+    {"SEARCH_RETRIEVAL_ENABLED": True},
+])
+def test_service_configuration_leaves_source_authorization_to_each_capability(override):
+    values = {**BASE, **SERVICE, **override}
+    original = dict(values)
+    assert RuntimeSettings.read(values, {}).auth_mode == "service_identity"
+    assert values == original
+
+
+async def test_auth_profile_cannot_change_live_or_be_restored_from_checkpoint():
+    providers = []
+    values = {**BASE, **SERVICE}
+
+    def loader(**kwargs):
+        keys = [selector.key_filter for selector in kwargs["selects"]]
+        provider = MagicMock()
+        provider.values = {k: v for k, v in values.items() if k in keys}
+        provider.items.side_effect = lambda: provider.values.items()
+        provider.keys.side_effect = lambda: provider.values.keys()
+        provider.__getitem__.side_effect = lambda key: provider.values[key]
+        providers.append(provider)
+        return provider
+
+    config = await NativeConfig("https://config.example.invalid", None, None, loader).open()
+    try:
+        snapshot = FunctionalSnapshot.capture({**values, "HOSTED_AGENT_AUTH_MODE": "user_delegated"})
+        assert "HOSTED_AGENT_AUTH_MODE" not in snapshot.values
+        assert (await config.view(snapshot)).get("HOSTED_AGENT_AUTH_MODE") == "service_identity"
+        providers[0].values["HOSTED_AGENT_AUTH_MODE"] = "user_delegated"
+        with pytest.raises(ValueError, match="Structural"):
+            await config.view(snapshot)
+    finally:
+        await config.close()
+
+
+async def test_native_connection_binding_cannot_be_hot_swapped():
+    providers = []
+    values = {
+        **BASE, **SERVICE, "FOUNDRY_IQ_ENABLED": True,
+        "TOOLBOX_ENDPOINT": BASE["AI_FOUNDRY_PROJECT_ENDPOINT"] + "/toolboxes/common/mcp?api-version=v1",
+    }
+
+    def loader(**kwargs):
+        keys = [selector.key_filter for selector in kwargs["selects"]]
+        provider = MagicMock()
+        provider.values = {k: v for k, v in values.items() if k in keys}
+        provider.items.side_effect = lambda: provider.values.items()
+        provider.keys.side_effect = lambda: provider.values.keys()
+        provider.__getitem__.side_effect = lambda key: provider.values[key]
+        providers.append(provider)
+        return provider
+
+    config = await NativeConfig("https://config.example.invalid", None, None, loader).open()
+    try:
+        view = await config.view()
+        assert view.get("TOOLBOX_ENDPOINT") == values["TOOLBOX_ENDPOINT"]
+        providers[1].values["TOOLBOX_ENDPOINT"] = BASE["AI_FOUNDRY_PROJECT_ENDPOINT"] + "/toolboxes/other/mcp?api-version=v1"
+        with pytest.raises(ValueError, match="Structural"):
+            await config.view()
+    finally:
+        await config.close()
 
 
 @pytest.mark.parametrize("mode", ["conversational", "workflow"])
