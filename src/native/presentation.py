@@ -59,9 +59,16 @@ def compact(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
 
 
+def object_schema(name: str) -> dict[str, Any]:
+    value = json.loads((ROOT / f"{name}-v1.schema.json").read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError("Presentation contracts require an object schema.")
+    return value
+
+
 def validator(name: str) -> Draft202012Validator:
     return Draft202012Validator(
-        json.loads((ROOT / f"{name}-v1.schema.json").read_text(encoding="utf-8")),
+        object_schema(name),
         format_checker=FormatChecker(),
     )
 
@@ -131,7 +138,7 @@ def normalize(value: Any, tool_name: str, result_id: str) -> dict[str, Any]:
     fields = value["fields"]
     if len(fields) > 100 or len(value["rows"]) > 500:
         raise ValueError("source bounds")
-    definitions = validator("turn-presentation").schema["$defs"]
+    definitions = object_schema("turn-presentation")["$defs"]
     field_validator = Draft202012Validator({
         "type": "object", "required": ["id", "type"],
         "properties": {"id": definitions["Id"],
@@ -146,9 +153,9 @@ def normalize(value: Any, tool_name: str, result_id: str) -> dict[str, Any]:
     if len(set(ids)) != len(ids):
         raise ValueError("duplicate fields")
     rows = []
-    typed = validator("turn-presentation").schema["$defs"]["TypedValue"]
+    typed = object_schema("turn-presentation")["$defs"]["TypedValue"]
     scalar_validator = Draft202012Validator({
-        **typed, "$defs": validator("turn-presentation").schema["$defs"],
+        **typed, "$defs": object_schema("turn-presentation")["$defs"],
     }, format_checker=FormatChecker())
     for index, row in enumerate(value["rows"]):
         if set(row["data"]) != set(ids):
@@ -229,7 +236,7 @@ def hydrate(selection: Any, sources: Sequence[dict[str, Any]], agent_id: str, re
         try:
             definition = {"cards": "Cards", "table": "Table", "chart": "Chart", "suggestions": "Suggestions"}[proposed["type"]]
             Draft202012Validator({"$ref": f"#/$defs/{definition}",
-                                  "$defs": validator("presentation-selection").schema["$defs"]}).validate(proposed)
+                                  "$defs": object_schema("presentation-selection")["$defs"]}).validate(proposed)
             block = {"blockId": uuid4().hex, "type": proposed["type"]}
             if "title" in proposed:
                 block["title"] = proposed["title"]
@@ -306,7 +313,7 @@ def hydrate(selection: Any, sources: Sequence[dict[str, Any]], agent_id: str, re
                         f"{escaped(s['label'])} {escaped(s['values'][i])} {escaped(s.get('unit', ''))}" for s in block["series"])
                                     for i, c in enumerate(block["categories"]))
             definition = {"cards": "Cards", "table": "Table", "chart": "Chart", "suggestions": "Suggestions"}[block["type"]]
-            check = Draft202012Validator({"$ref": f"#/$defs/{definition}", "$defs": validator("turn-presentation").schema["$defs"]},
+            check = Draft202012Validator({"$ref": f"#/$defs/{definition}", "$defs": object_schema("turn-presentation")["$defs"]},
                                          format_checker=FormatChecker())
             if not check.is_valid(block):
                 raise ValueError("known block shape")
@@ -388,11 +395,12 @@ def merge_presentations(envelopes: Sequence[dict[str, Any] | None]) -> dict[str,
     """Merge trusted native occurrences; invalid producers cannot erase siblings."""
     accepted, revision = [], None
     check = validator("turn-presentation")
+    schema = object_schema("turn-presentation")
     contribution_check = Draft202012Validator(
-        {"$ref": "#/$defs/Contribution", "$defs": check.schema["$defs"]}, format_checker=FormatChecker())
+        {"$ref": "#/$defs/Contribution", "$defs": schema["$defs"]}, format_checker=FormatChecker())
     header_check = Draft202012Validator({
-        **check.schema, "required": [k for k in check.schema["required"] if k != "contributions"],
-        "properties": {k: v for k, v in check.schema["properties"].items() if k != "contributions"},
+        **schema, "required": [k for k in schema["required"] if k != "contributions"],
+        "properties": {k: v for k, v in schema["properties"].items() if k != "contributions"},
     }, format_checker=FormatChecker())
 
     def bindings(value: Any) -> set[str]:

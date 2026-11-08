@@ -3,6 +3,15 @@ import json
 
 import pytest
 
+
+def test_packaged_contract_schema_requires_object_not_boolean(monkeypatch, tmp_path):
+    from native import presentation
+
+    (tmp_path / "turn-presentation-v1.schema.json").write_text("false", encoding="utf-8")
+    monkeypatch.setattr(presentation, "ROOT", tmp_path)
+    with pytest.raises(ValueError, match="object schema"):
+        presentation.validator("turn-presentation")
+
 from native.presentation import hydrate, normalize, settings, supervise
 
 
