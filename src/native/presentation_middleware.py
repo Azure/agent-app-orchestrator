@@ -116,10 +116,19 @@ async def compose(context: AgentContext, call_next: Callable[[], Awaitable[None]
         return result
 
     if not context.stream:
+        if not isinstance(context.result, AgentResponse):
+            raise TypeError("Nonstreaming native composition requires an AgentResponse.")
         context.result = await finish(context.result)
         return
     original = context.result
+    if not isinstance(original, ResponseStream):
+        raise TypeError("Streaming native composition requires a ResponseStream.")
     completed: AgentResponse | None = None
+
+    def final_response(_: Sequence[AgentResponseUpdate]) -> AgentResponse:
+        if completed is None:
+            raise RuntimeError("Native stream did not complete.")
+        return completed
 
     async def close_original() -> None:
         try:
@@ -152,7 +161,7 @@ async def compose(context: AgentContext, call_next: Callable[[], Awaitable[None]
                 completed = await finish(await original.get_final_response())
             finally:
                 await close_original()
-        context.result = ResponseStream(ordinary_updates(), finalizer=lambda _: completed)
+        context.result = ResponseStream(ordinary_updates(), finalizer=final_response)
         return
 
     async def updates() -> AsyncIterator[AgentResponseUpdate]:
@@ -185,4 +194,4 @@ async def compose(context: AgentContext, call_next: Callable[[], Awaitable[None]
         finally:
             await close_original()
 
-    context.result = ResponseStream(updates(), finalizer=lambda _: completed)
+    context.result = ResponseStream(updates(), finalizer=final_response)

@@ -110,6 +110,11 @@ async def test_fresh_turn_bypasses_throttle_and_workflow_retains_snapshot_with_l
         assert "agent_lz_presentation" in enabled.text
         live.pop("AGENT_PRESENTATION_SETTINGS")  # Removed before the next turn (<30s).
         providers[0].values.update(RETRIEVAL_AUTH_MODE="application", ALLOW_ANONYMOUS="true")
+        # Current native admission rejects anonymous mode, including resume.
+        # A frozen functional snapshot must not bypass that live restriction.
+        with pytest.raises(ValueError, match="authenticated user admission"):
+            await config.view(snapshot)
+        providers[0].values["ALLOW_ANONYMOUS"] = "false"
         live["MCP_AUTH_RESOURCE_SCOPE"] = "new-live-scope"
         fresh = await config.view()
         assert settings(fresh.get("AGENT_PRESENTATION_SETTINGS", None, type=None), "a") is None
@@ -125,7 +130,7 @@ async def test_fresh_turn_bypasses_throttle_and_workflow_retains_snapshot_with_l
         frozen = await config.view(snapshot)
         assert settings(frozen.get("AGENT_PRESENTATION_SETTINGS", None, type=None), "a") is not None
         assert frozen.get("RETRIEVAL_AUTH_MODE") == "application"
-        assert frozen.get("ALLOW_ANONYMOUS", type=bool) is True
+        assert frozen.get("ALLOW_ANONYMOUS", type=bool) is False
         assert frozen.get("MCP_AUTH_RESOURCE_SCOPE") == "new-live-scope"
         with pytest.raises(TypeError, match="immutable"):
             snapshot.values["AGENT_PRESENTATION_SETTINGS"] = configuration({})
