@@ -16,7 +16,7 @@ from native import hosted
 from native.agent import create_agent
 from native.contracts import ResearchReviewResult, ResearchReviewStart
 from native.tools import ToolIdentity
-from test_native_runtime import RecordingClient, fake_config
+from test_native_runtime import SERVICE, RecordingClient, fake_config
 
 
 @pytest.mark.parametrize("name,media_type,data", [
@@ -92,6 +92,27 @@ async def test_native_inline_input_reaches_real_foundry_model_serialization(
             assert item["filename"] == name and item["file_data"] == uri
     finally:
         await openai_client.close()
+
+
+async def test_default_hosted_obo_with_retrieval_off_still_works(monkeypatch, tmp_path):
+    monkeypatch.setenv("AGENTSERVER_STATE_ROOT", str(tmp_path))
+    monkeypatch.setenv("FOUNDRY_AGENT_SESSION_ID", "synthetic-session")
+    model = RecordingClient()
+
+    def factory(config, **kwargs):
+        return create_agent(config, client=model, **kwargs)
+
+    monkeypatch.setattr(hosted, "create_agent", factory)
+    server = hosted.build_server(fake_config({
+        "FOUNDRY_IQ_ENABLED": False,
+    }, mode="conversational"))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=server), base_url="http://test") as client:
+        response = await client.post("/responses", headers={
+            "x-agent-user-id": "real-platform-partition", "x-agent-foundry-call-id": "real-platform-call",
+        }, json={"input": "Protected query", "store": True, "stream": False})
+    assert response.status_code == 200 and response.json()["status"] == "completed", response.text
+    assert len(model.calls) == 1
+    assert not model.calls[0][1].get("tools")
 
 
 async def test_parser_uses_typed_start_and_native_pending_response_decoder():
@@ -237,3 +258,50 @@ def test_hosted_identity_never_uses_request_metadata(monkeypatch):
     monkeypatch.setattr(core, "get_request_context", lambda: None)
     with pytest.raises(ValueError, match="trusted platform"):
         hosted.hosted_identity()
+
+
+def test_service_identity_requires_real_platform_partition_without_fabricating_user_context(monkeypatch):
+    from azure.ai.agentserver.core import FoundryAgentRequestContext
+    import azure.ai.agentserver.core as core
+
+    context = FoundryAgentRequestContext(user_id="opaque-service-partition", call_id="service-call")
+    monkeypatch.setattr(core, "get_request_context", lambda: context)
+    identity = hosted.hosted_identity("service_identity")
+    assert identity.call_id == "service-call" and identity.search_token is None
+    assert not hasattr(identity, "user_id")
+    assert context.user_id == "opaque-service-partition"
+    context.user_id = None
+    with pytest.raises(ValueError, match="No end-user identity can be fabricated"):
+        hosted.hosted_identity("service_identity")
+
+
+async def test_service_caller_uses_official_responses_host_and_native_history(monkeypatch, tmp_path):
+    monkeypatch.setenv("AGENTSERVER_STATE_ROOT", str(tmp_path))
+    monkeypatch.setenv("FOUNDRY_AGENT_SESSION_ID", "synthetic-session")
+    calls = []
+
+    def factory(config, **kwargs):
+        kwargs["identity_provider"]()
+        model = RecordingClient()
+        calls.append(model)
+        return create_agent(config, client=model, **kwargs)
+
+    monkeypatch.setattr(hosted, "create_agent", factory)
+    server = hosted.build_server(fake_config(SERVICE, mode="conversational"))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=server), base_url="http://test") as client:
+        headers = {"x-agent-user-id": "opaque-service-partition", "x-agent-foundry-call-id": "service-call"}
+        response = await client.post("/responses", headers=headers, json={
+            "input": "Remember cobalt", "store": True, "stream": False,
+        })
+        assert response.status_code == 200 and response.json()["status"] == "completed", response.text
+        continued = await client.post("/responses", headers=headers, json={
+            "input": "Recall it", "previous_response_id": response.json()["id"],
+            "store": True, "stream": False,
+        })
+        assert continued.status_code == 200 and continued.json()["status"] == "completed", continued.text
+        assert "cobalt" in "\n".join(message.text for message in calls[-1].calls[0][0])
+        rejected = await client.post("/responses", headers={"x-agent-foundry-call-id": "service-call"}, json={
+            "input": "No forged partition", "store": True, "stream": False,
+        })
+        assert rejected.status_code >= 400 or rejected.json()["status"] != "completed"
+        assert len(calls) == 2
