@@ -152,10 +152,11 @@ class FrozenValues(dict[str, Any]):
     def update(self, *args: Any, **kwargs: Any) -> NoReturn:
         self._immutable()
 
-    # In-place union is deliberately forbidden; dict's mutable union overloads
-    # cannot express this raising operation on an immutable subclass.
-    def __ior__(self, other: Any) -> "FrozenValues":  # type: ignore[override,misc]
+    def __ior__(self, other: Any) -> NoReturn:
         self._immutable()
+
+    def __or__(self, other: Any) -> dict[Any, Any]:
+        return super().__or__(other)
 
     def __deepcopy__(self, memo: dict[int, Any]) -> "FrozenValues":
         return self

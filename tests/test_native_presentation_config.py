@@ -16,6 +16,21 @@ def configuration(agents):
     return json.dumps({"schemaVersion": 1, "agents": agents})
 
 
+def test_immutable_snapshot_union_preserves_nonmutating_dictionary_behavior():
+    snapshot = FunctionalSnapshot.capture({"AGENT_PRESENTATION_SETTINGS": configuration({})})
+    values = snapshot.values
+    original = dict(values)
+    copied = values | {2: "extra"}
+    assert type(copied) is dict
+    assert copied == {**original, 2: "extra"}
+    assert {"extra": 1} | values == {"extra": 1, **original}
+    for additions in ({"extra": 1}, [("extra", 1)]):
+        with pytest.raises(TypeError, match="immutable"):
+            values |= additions
+    assert values == original
+    assert snapshot == FunctionalSnapshot.model_validate_json(snapshot.model_dump_json())
+
+
 @pytest.mark.parametrize("value", [None, configuration({}), configuration({"a": {"enabled": False}})])
 async def test_disabled_agent_has_one_normal_source_call_and_no_optional_work(monkeypatch, value):
     counts = {}
