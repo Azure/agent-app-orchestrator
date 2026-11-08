@@ -8,10 +8,10 @@ import threading
 from collections.abc import Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, Iterator, Literal
+from typing import Any, Iterator, Literal, NoReturn
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 LABEL = "agent-lz"
 BASE_KEYS = (
@@ -22,6 +22,7 @@ BASE_KEYS = (
     "AUDIT_EVENTS_ENABLED", "LOG_LEVEL", "APPLICATIONINSIGHTS_CONNECTION_STRING",
     "AZURE_LOG_LEVEL", "AZURE_HTTP_LOG_LEVEL", "AZURE_MONITOR_DISABLE_LOGGING",
     "RETRIEVAL_AUTH_MODE", "ALLOW_ANONYMOUS",
+    "AGENT_PRESENTATION_SETTINGS",
 )
 TOOL_KEYS = {
     "SEARCH_RETRIEVAL_ENABLED": (
@@ -105,10 +106,58 @@ class RuntimeSettings(BaseModel):
         return result
 
 
+class FrozenValues(dict[str, Any]):
+    """JSON-serializable immutable values, including nested functional settings."""
+    def _immutable(self, *args: Any, **kwargs: Any) -> NoReturn:
+        raise TypeError("Functional snapshot values are immutable")
+
+    def __setitem__(self, key: str, value: Any) -> NoReturn:
+        self._immutable()
+
+    def __delitem__(self, key: str) -> NoReturn:
+        self._immutable()
+
+    def clear(self) -> NoReturn:
+        self._immutable()
+
+    def pop(self, key: str, default: Any = None) -> NoReturn:
+        self._immutable()
+
+    def popitem(self) -> NoReturn:
+        self._immutable()
+
+    def setdefault(self, key: str, default: Any = None) -> NoReturn:
+        self._immutable()
+
+    def update(self, *args: Any, **kwargs: Any) -> NoReturn:
+        self._immutable()
+
+    # In-place union is deliberately forbidden; dict's mutable union overloads
+    # cannot express this raising operation on an immutable subclass.
+    def __ior__(self, other: Any) -> "FrozenValues":  # type: ignore[override,misc]
+        self._immutable()
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> "FrozenValues":
+        return self
+
+
+def freeze_values(value: Any) -> Any:
+    if isinstance(value, dict):
+        return FrozenValues({key: freeze_values(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(freeze_values(item) for item in value)
+    return value
+
+
 class FunctionalSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     revision: str
     values: dict[str, Any]
+
+    @field_validator("values")
+    @classmethod
+    def immutable_values(cls, value: dict[str, Any]) -> dict[str, Any]:
+        return freeze_values(value)
 
     @classmethod
     def capture(cls, values: Mapping[str, Any]) -> "FunctionalSnapshot":
@@ -218,14 +267,17 @@ class NativeConfig:
             if any(enabled(values.get(k, False)) != v for k, v in self._flags.items()):
                 raise ValueError("Enabled capabilities changed; redeploy.")
             mcp_provider = self._load_provider(tuple(
-                key for key in ("MCP_ENABLED", *TOOL_KEYS["MCP_ENABLED"]) if key != "MCP_API_KEY"
+                key for key in ("MCP_ENABLED", *TOOL_KEYS["MCP_ENABLED"],
+                                *(("AGENT_PRESENTATION_SETTINGS",) if snapshot is None else ()))
+                if key != "MCP_API_KEY"
             ))
             try:
                 # Public refresh() is throttled. A selected, request-owned
                 # provider guarantees the next invocation reads publication
                 # enablement, host list, endpoint and resource scope together.
                 values = {
-                    **{k: v for k, v in values.items() if k not in _DYNAMIC_MCP_KEYS},
+                    **{k: v for k, v in values.items() if k not in _DYNAMIC_MCP_KEYS
+                       and (snapshot is not None or k != "AGENT_PRESENTATION_SETTINGS")},
                     **dict(mcp_provider),
                 }
             finally:

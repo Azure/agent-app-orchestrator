@@ -11,6 +11,8 @@ from agent_framework_foundry import FoundryChatClient
 from .config import FunctionalSnapshot, NativeConfig
 from .contracts import AGENT_NAME
 from .tools import ToolIdentity, compose_tools
+from .presentation import settings as presentation_settings
+from .presentation_middleware import capture_result, compose as compose_presentation
 
 _instructions = (Path(__file__).parent / "prompts" / "main.txt").read_text(encoding="utf-8")
 
@@ -29,15 +31,24 @@ def hosted_identity() -> ToolIdentity:
 def create_agent(
     config: NativeConfig, *, snapshot: FunctionalSnapshot | None = None,
     client: Any = None, identity_provider: Callable[[], ToolIdentity] = ToolIdentity,
+    definition_id: str = AGENT_NAME, workflow_ordinal: int = 0,
 ) -> Agent:
+    if not definition_id or type(workflow_ordinal) is not int or workflow_ordinal < 0:
+        raise ValueError("Presentation requires a stable definition ID and nonnegative occurrence ordinal.")
     settings = config.settings
     if settings is None:
         raise ValueError("Native configuration must be opened before building an agent.")
     identity = identity_provider()
+    chat_client = client or FoundryChatClient(
+        project_endpoint=settings.project_endpoint, model=settings.model,
+        credential=config.sync_credential, timeout=60,
+        default_headers={"x-agent-foundry-call-id": identity.call_id} if identity.call_id else None,
+    )
 
     @agent_middleware
     async def configure(context: AgentContext, call_next: Callable[[], Awaitable[None]]) -> None:
         view = await config.view(snapshot)
+        selected = presentation_settings(view.get("AGENT_PRESENTATION_SETTINGS", None, type=None), definition_id)
         identity = identity_provider()
         resources = AsyncExitStack()
         defer_cleanup = False
@@ -51,19 +62,16 @@ def create_agent(
             if context.stream:
                 # Native middleware owns lazy-stream cleanup, not a browser socket.
                 context.stream_cleanup_hooks.append(resources.aclose)
-            await call_next()
+            await compose_presentation(context, call_next, chat_client, selected, definition_id,
+                                       workflow_ordinal=workflow_ordinal)
             defer_cleanup = context.stream
         finally:
             if not defer_cleanup:
                 await resources.aclose()
 
     return Agent(
-        client=client or FoundryChatClient(
-            project_endpoint=settings.project_endpoint, model=settings.model,
-            credential=config.sync_credential, timeout=60,
-            default_headers={"x-agent-foundry-call-id": identity.call_id} if identity.call_id else None,
-        ),
-        name=AGENT_NAME, id=AGENT_NAME, instructions=_instructions, middleware=[configure],
+        client=chat_client,
+        name=definition_id, id=definition_id, instructions=_instructions, middleware=[configure, capture_result],
     )
 
 
