@@ -21,6 +21,60 @@ REPLACED_SQL_RECORD = "nl2sql-sql-result-translation"
 REPLACED_EXCEPTION_RECORDS = {REPLACED_SQL_RECORD, "appconfig-provider-availability-translation"}
 
 
+@pytest.mark.parametrize("pin,mutation,accepted", [
+    ("4.26.0.20261006", None, True),
+    (None, None, True),
+    (">=4.23.0,<5", None, False),
+    ("latest", None, False),
+    ("4.26.0", None, False),
+    ("4.26.0.20261006", "unknown-tool", False),
+    ("4.26.0.20261006", "missing-core-tool", False),
+    ("4.26.0.20261006", "requirements-disagree", False),
+])
+def test_schema_type_stubs_require_exact_pin(tmp_path, pin, mutation, accepted):
+    root = Path(QUALITY["__file__"]).resolve().parents[2]
+    target = tmp_path / ".quality"
+    target.mkdir()
+    for path in (root / ".quality").glob("*.json"):
+        (target / path.name).write_bytes(path.read_bytes())
+    policy_path = target / "policy.json"
+    policy = json.loads(policy_path.read_text())
+    policy["toolchain"].pop("types-jsonschema", None)
+    if pin is not None:
+        policy["toolchain"]["types-jsonschema"] = pin
+    if mutation == "unknown-tool":
+        policy["toolchain"]["unapproved-tool"] = "1.0.0"
+    elif mutation == "missing-core-tool":
+        del policy["toolchain"]["ruff"]
+    policy_path.write_text(json.dumps(policy))
+    requirements = (root / "requirements-quality.txt").read_text()
+    requirements = "\n".join(
+        line for line in requirements.splitlines()
+        if not line.startswith("types-jsonschema")
+    )
+    if pin is not None:
+        requirement_pin = "4.26.0.20261005" if mutation == "requirements-disagree" else pin
+        requirements += f"\ntypes-jsonschema=={requirement_pin}"
+    (tmp_path / "requirements-quality.txt").write_text(requirements + "\n")
+    if accepted:
+        result = QUALITY["load_records"](tmp_path)
+        assert result["policy.json"]["toolchain"].get("types-jsonschema") == pin
+    else:
+        with pytest.raises(QUALITY["QualityError"]):
+            QUALITY["load_records"](tmp_path)
+
+
+def test_schema_type_stub_version_discovery_uses_requested_packages(tmp_path):
+    tools = ("ruff", "mypy", "import-linter", "grimp")
+    for packages in (tools, (*tools, "types-jsonschema")):
+        result = QUALITY["static_tool"]("versions", tmp_path, packages)
+        assert result.returncode == 0, result.stderr
+        versions = json.loads(result.stdout)
+        assert set(versions) == set(packages)
+        if "types-jsonschema" in versions:
+            assert versions["types-jsonschema"] == "4.26.0.20261006"
+
+
 def tree(tmp_path, files):
     for name, text in files.items():
         path = tmp_path / "src" / name

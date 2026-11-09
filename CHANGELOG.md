@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- Local inline-presentation candidate: opt-in typed result capture, tool-free
+  selection, exact source hydration, bounded native assistant envelopes and
+  optional workflow presentation fields. Acceptance and release remain pending.
+- Fresh per-turn presentation settings and deeply immutable workflow functional
+  snapshots, retaining live authorization and MCP settings.
+- Value-free optional-stage reason/count/elapsed/correlation diagnostics, with
+  exact-deadline, cancellation, late-result and cleanup regression coverage.
+  Native authorization/transport failures remain explicit.
+
+### Fixed
+
+- Preserve opaque native citations through primary marker guarding in stream
+  and completed responses; verify source-only status and business-ID prompts.
+
 ## [v7.1.0] - 2026-11-02
 
 ### Added
