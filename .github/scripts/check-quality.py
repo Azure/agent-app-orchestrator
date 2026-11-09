@@ -113,8 +113,9 @@ def static_tool_main(tool, arguments):
 
     sys.addaudithook(refuse_source_execution)
     if tool == "versions":
+        names = arguments or ("ruff", "mypy", "import-linter", "grimp")
         print(json.dumps({name: importlib.metadata.version(name)
-                          for name in ("ruff", "mypy", "import-linter", "grimp")}))
+                          for name in names}))
     elif tool in ("ruff", "mypy"):
         sys.argv = [tool, *arguments]
         runpy.run_module(tool, run_name="__main__")
@@ -254,9 +255,13 @@ def load_records(root):
     strings(policy["modules"], "modules")
     if not re.fullmatch("[0-9a-f]{40}", policy["source_revision"]):
         raise QualityError("Policy must name its immutable source revision")
-    exact_keys(policy["toolchain"], ("ruff", "mypy", "import-linter", "grimp"), "toolchain")
-    if any(not isinstance(pin, str) or not re.fullmatch(r"\d+(?:\.\d+){1,3}", pin)
-           for pin in policy["toolchain"].values()):
+    tools = ("ruff", "mypy", "import-linter", "grimp")
+    if isinstance(policy["toolchain"], dict) and "types-jsonschema" in policy["toolchain"]:
+        tools = (*tools, "types-jsonschema")
+    exact_keys(policy["toolchain"], tools, "toolchain")
+    if any(not isinstance(pin, str) or not re.fullmatch(
+            r"\d+\.\d+\.\d+\.\d{8}" if name == "types-jsonschema" else r"\d+(?:\.\d+){1,3}", pin)
+           for name, pin in policy["toolchain"].items()):
         raise QualityError("Toolchain versions must be exact numeric pins")
     requirements = {
         line.strip() for line in (root / "requirements-quality.txt").read_text().splitlines()
@@ -1316,7 +1321,7 @@ def main(argv=None):
             policy = records["policy.json"]
             report["policy_sha"] = digest(records)
             report["bootstrap"] = bootstrap
-            versions_result = static_tool("versions", trusted)
+            versions_result = static_tool("versions", trusted, tuple(policy["toolchain"]))
             if versions_result.returncode or versions_result.stderr.strip():
                 raise QualityError("Installed tool discovery failed: " + versions_result.stderr[-1000:])
             installed = json.loads(versions_result.stdout)

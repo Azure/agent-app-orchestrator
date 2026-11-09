@@ -33,7 +33,7 @@
     "private_access": [],
     "dynamic_imports": []
   },
-  "toolchain": {"ruff": "0.16.5", "mypy": "2.3.1", "import-linter": "2.14", "grimp": "3.16"},
+  "toolchain": {"ruff": "0.16.5", "mypy": "2.3.1", "import-linter": "2.14", "grimp": "3.16", "types-jsonschema": "4.26.0.20261006"},
   "required_checks": ["lint", "typing", "architecture", "exceptions", "policy", "tests", "frontend"],
   "review": {
     "status": "active",

@@ -1,5 +1,36 @@
 # Changelog
 
+## [v7.2.0] - 2026-11-08
+
+### Added
+
+- **Opt-in inline presentation:** typed result capture, tool-free
+  selection, exact source hydration, bounded native assistant envelopes and
+  optional workflow presentation fields. Feature qualification is recorded
+  below; live production acceptance and enablement are not claimed.
+- Fresh per-turn presentation settings and deeply immutable workflow functional
+  snapshots, retaining live authorization and MCP settings.
+- Value-free optional-stage reason/count/elapsed/correlation diagnostics, with
+  exact-deadline, cancellation, late-result and cleanup regression coverage.
+  Native authorization/transport failures remain explicit.
+
+### Fixed
+
+- Preserve opaque native citations through primary marker guarding in stream
+  and completed responses; verify source-only status and business-ID prompts.
+
+### Validation
+
+- **Merged feature qualification.** GitHub Actions run `42521013276` passed
+  behavior tests, frontend build, all five quality checks and the aggregate
+  gate at `a2e60129fcb4ccb3c1a41989d2aeeef601c18331`. The merged `develop`
+  head has the same Git tree as that qualified feature candidate.
+- **Coordinated adoption.** Use the matching UI v3.7.0 reader and the umbrella
+  release's validated manifest/configuration. Central inline visuals
+  documentation was merged in Azure/AI-Landing-Zones#178. Release readiness
+  additionally requires passing CI on the exact main-target PR. Disable new
+  generation for rollback while retaining saved-message readers.
+
 ## [v7.1.0] - 2026-11-02
 
 ### Added

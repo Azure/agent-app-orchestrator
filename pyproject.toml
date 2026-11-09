@@ -9,6 +9,7 @@ dependencies = [
     "azure-identity==1.25.3",
     "azure-appconfiguration-provider==2.3.1",
     "azure-monitor-opentelemetry==1.8.11",
+    "jsonschema>=4.23.0,<5",
 ]
 
 [project.optional-dependencies]
@@ -42,6 +43,12 @@ sources = ["src"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "VERSION" = "native/VERSION"
+"contracts/agent-presentation-settings-v1.schema.json" = "native/contracts/agent-presentation-settings-v1.schema.json"
+"contracts/presentation-selection-v1.schema.json" = "native/contracts/presentation-selection-v1.schema.json"
+"contracts/turn-presentation-v1.schema.json" = "native/contracts/turn-presentation-v1.schema.json"
+"contracts/agent-presentation-settings-v1.schema.json.sha256" = "native/contracts/agent-presentation-settings-v1.schema.json.sha256"
+"contracts/presentation-selection-v1.schema.json.sha256" = "native/contracts/presentation-selection-v1.schema.json.sha256"
+"contracts/turn-presentation-v1.schema.json.sha256" = "native/contracts/turn-presentation-v1.schema.json.sha256"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -9,6 +9,7 @@ RUN pip install -r requirements.txt -r requirements-tools.txt \
     && python -c "import tiktoken; tiktoken.get_encoding('o200k_base')" \
     && chmod -R a+rX "$TIKTOKEN_CACHE_DIR"
 COPY src/ ./src/
+COPY contracts/ ./contracts/
 COPY VERSION ./
 
 FROM runtime-base AS container_apps

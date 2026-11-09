@@ -1,5 +1,7 @@
 # Keep Bash entrypoints executable from WSL/Linux checkouts.
 *.sh text eol=lf
+contracts/*presentation*.json text eol=lf
+contracts/*presentation*.sha256 text eol=lf
 
 # Vendored audit-event-v2 contract (Agent Landing Zone): keep bytes identical to the pinned SHA-256.
 contracts/audit-event-v2.schema.json -text
