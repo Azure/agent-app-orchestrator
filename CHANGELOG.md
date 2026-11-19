@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Shell deployment reads single-line App Configuration values.** `scripts/deploy.sh`
+  no longer drops the last Azure CLI output line when it has no trailing newline.
+  Before this fix, `get_config_value` rejected valid values such as
+  `CONTAINER_REGISTRY_NAME` on Linux. A failed read now reports the exit code
+  and raw Azure CLI output.
+
 ## [v7.2.0] - 2026-11-08
 
 ### Added
