@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [v7.2.2] - 2026-11-21
+
+### Changed
+
+- **Updated runtime dependencies.** Upgrade Azure Identity to 1.27.0,
+  Azure App Configuration Provider to 2.5.1, Azure Storage Blob to 12.31.1,
+  and FastAPI to 0.162.0. Keep the Python package metadata and host dependency
+  manifests synchronized.
+- **Updated immutable GitHub Actions dependencies.** Upgrade the grouped
+  workflow dependencies while retaining verified full-commit SHA references.
+
+### Fixed
+
+- **Synchronized the mypy toolchain pin.** Align the quality policy with
+  mypy 2.4.1 without changing required checks, typing scope, provenance,
+  exception allowances, or branch protection.
+- **Regenerated the agentic workflow dependency metadata.** Recompile the
+  issue classifier with its matching compiler and persist the selected action
+  pins so generated comments and metadata match the executable references.
+
 ## [v7.2.1] - 2026-11-19
 
 ### Fixed
