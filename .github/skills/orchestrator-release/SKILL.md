@@ -5,6 +5,9 @@ description: Prepares and validates Agent Landing Zone Orchestrator releases. Us
 
 # Agent Landing Zone Orchestrator release
 
+For an `Azure/agent-landing-zone` umbrella release, the exact candidate must pass its required CI and applicable unit, integration, quality, security, contract, and compatibility checks before the pre-release is published. The standard live Azure validation is not a pre-release publication gate. After publication, dispatch `.github/workflows/release-validation.yml` with both providers and promotion enabled. Only that workflow may promote the release to Latest, after both Bicep and Terraform pass. Component-specific publication, validation, compatibility, rollback, and human approval requirements remain in force.
+
+
 Read `.github/copilot-instructions.md` and
 `.github/instructions/release.instructions.md` completely before changing a
 release artifact.
