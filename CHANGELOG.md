@@ -6,6 +6,8 @@
 
 ### Changed
 
+- **Updated frontend build dependencies.** Upgrade minimatch to 11.0.9
+  through typescript-eslint 8.73.0 and refresh the dependency lockfile.
 - **Clarified umbrella release validation.** Document the pre-release checks
   and the post-publication Bicep and Terraform validation required before
   promotion to Latest.
