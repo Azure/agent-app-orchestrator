@@ -45,6 +45,9 @@ default workflow or permit unrelated feature work.
 
 ## Release workflow
 
+For an `Azure/agent-landing-zone` umbrella release, the exact candidate must pass its required CI and applicable unit, integration, quality, security, contract, and compatibility checks before the pre-release is published. The standard live Azure validation is not a pre-release publication gate. After publication, dispatch `.github/workflows/release-validation.yml` with both providers and promotion enabled. Only that workflow may promote the release to Latest, after both Bicep and Terraform pass. Component-specific publication, validation, compatibility, rollback, and human approval requirements remain in force.
+
+
 - Create `release/x.y.z` from `develop`; the branch name has no `v` prefix.
 - Release branches contain release preparation only and target `main`.
 - Update root `VERSION` to `x.y.z`.
