@@ -1,5 +1,13 @@
 # Changelog
 
+## [v7.2.3] - 2026-11-23
+
+### Changed
+
+- **Clarified umbrella release validation.** Document the pre-release checks
+  and the post-publication Bicep and Terraform validation required before
+  promotion to Latest.
+
 ## [v7.2.2] - 2026-11-21
 
 ### Changed
