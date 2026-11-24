@@ -614,7 +614,7 @@ def policy_repo(tmp_path):
         path.parent.mkdir(exist_ok=True)
         path.write_text(json.dumps(data))
     for name in (".github/scripts/check-quality.py", ".github/CODEOWNERS",
-                 ".github/workflows/pr_pipeline.yaml", "tests/test_quality_policy.py"):
+                 ".github/workflows/quality-gate.yml", "tests/test_quality_policy.py"):
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# protected\n")
@@ -625,7 +625,7 @@ def policy_repo(tmp_path):
 
 @pytest.mark.parametrize("path,text", [
     (".github/scripts/check-quality.py", "print('passed')"),
-    (".github/workflows/pr_pipeline.yaml", "jobs: {}\n"),
+    (".github/workflows/quality-gate.yml", "jobs: {}\n"),
     ("tests/test_quality_policy.py", "# no quality tests\n"),
     (".github/CODEOWNERS", "# no owners"),
     (".quality/module-surfaces.json", '{"entries": [], "schema_version": 1}'),
@@ -889,7 +889,7 @@ def test_tool_config_expansion_is_maintainable_without_self_lock():
 
 @pytest.mark.parametrize("path", [
     ".github/workflows/issue-type-classifier.lock.yml",
-    ".github/workflows/validate-agentic-assets.yml",
+    ".github/workflows/deploy-dev.yml",
     ".github/workflows/other-automation.yml",
 ])
 def test_non_quality_workflows_do_not_trigger_protected_policy_veto(policy_repo, path):
@@ -1368,7 +1368,7 @@ def protected_aggregate(tmp_path_factory):
 @pytest.mark.parametrize("mutation", [
     None, "missing", "stale", "tampered", "skipped", "policy", "all-policy",
     "toolchain", "run_id", "run_attempt", "repository", "schema", "bootstrap",
-    "inventory", "duplicate", "wrong-head-checkout",
+    "inventory", "duplicate", "wrong-head-checkout", "agentic-missing", "agentic-cancelled",
 ])
 def test_actual_aggregate_fails_closed(tmp_path, protected_aggregate, mutation):
     protected, base = protected_aggregate
@@ -1404,9 +1404,13 @@ def test_actual_aggregate_fails_closed(tmp_path, protected_aggregate, mutation):
             (tmp_path / "duplicate").mkdir()
             (tmp_path / "duplicate" / "quality-lint.json").write_text(json.dumps(report))
         (tmp_path / f"quality-{check}.json").write_text(json.dumps(report))
-    needs = {name: {"result": "success"} for name in ("tests", "frontend", "quality")}
+    needs = {name: {"result": "success"} for name in ("tests", "frontend", "quality", "agentic-assets")}
     if mutation == "skipped":
         needs["tests"]["result"] = "skipped"
+    if mutation == "agentic-missing":
+        del needs["agentic-assets"]
+    if mutation == "agentic-cancelled":
+        needs["agentic-assets"]["result"] = "cancelled"
     proc = subprocess.run(
         [sys.executable, "-I", "-S", str(protected / ".github" / "scripts" / "aggregate-quality.py"),
          "--reports", str(tmp_path),

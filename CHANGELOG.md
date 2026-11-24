@@ -475,7 +475,7 @@
 
 ### Added
 
-- A `frontend build` job in `.github/workflows/pr_pipeline.yaml`. The
+- A `frontend build` job in `.github/workflows/quality-gate.yml`. The
   frontend previously had no CI coverage at all, which is why all three
   regressions reached a tagged release.
 ## [v4.1.0] - 2026-09-03

@@ -21,10 +21,10 @@ def main():
     args = parser.parse_args()
     checker = runpy.run_path(str(Path(__file__).with_name("check-quality.py")))
     needs = json.loads(args.needs)
-    if set(needs) != {"quality", "tests", "frontend"} or any(
+    if set(needs) != {"quality", "tests", "frontend", "agentic-assets"} or any(
         job["result"] != "success" for job in needs.values()
     ):
-        raise SystemExit("Required test/frontend/quality job was not successful")
+        raise SystemExit("Required test/frontend/quality/agentic-assets job was not successful")
     root = Path(__file__).resolve().parents[2]
     if checker["git"](root, "rev-parse", "HEAD").strip() != args.head_sha:
         raise SystemExit("Aggregate must execute from the exact reviewed head checkout")

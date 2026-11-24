@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 def test_dev_deployment_requires_an_explicit_manual_dispatch():
-    workflow = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "cicd_pipeline.yaml"
+    workflow = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "deploy-dev.yml"
     contents = workflow.read_text(encoding="utf-8")
     trigger_block = re.search(r"(?m)^on:\n((?:[ \t]+[^\n]*\n|\n)*)", contents)
     assert trigger_block is not None
@@ -13,7 +13,7 @@ def test_dev_deployment_requires_an_explicit_manual_dispatch():
 
 
 def test_dev_deployment_token_is_explicitly_read_only():
-    workflow = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "cicd_pipeline.yaml"
+    workflow = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "deploy-dev.yml"
     contents = workflow.read_text(encoding="utf-8")
     permissions_block = re.search(r"(?m)^permissions:\n((?:[ \t]+[^\n]*\n|\n)*)", contents)
     assert permissions_block is not None

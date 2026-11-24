@@ -1,16 +1,45 @@
-name: Pull Request Pipeline
+name: Quality gate
 
 on:
   pull_request:
     branches:
       - develop
       - main
+  push:
+    branches: [main, develop]
   merge_group:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  agentic-assets:
+    name: agentic-assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: .github/scripts/requirements.txt
+
+      - name: Install pinned validator dependencies
+        run: >-
+          python -m pip install --disable-pip-version-check
+          -r .github/scripts/requirements.txt
+
+      - name: Validate agents, skills, and scoped instructions
+        run: python .github/scripts/validate-agentic-assets.py
+
   tests:
     name: tests
     runs-on: ubuntu-latest
@@ -95,7 +124,7 @@ jobs:
       matrix:
         check: [lint, typing, architecture, exceptions, policy]
     env:
-      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || github.sha }}
     steps:
       - name: Checkout candidate
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -145,12 +174,12 @@ jobs:
 
   quality-gate:
     name: quality-gate
-    needs: [tests, frontend, quality]
+    needs: [tests, frontend, quality, agentic-assets]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || github.sha }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       JOB_RESULTS: ${{ toJSON(needs) }}
     steps:
@@ -159,7 +188,7 @@ jobs:
           python - <<'PY'
           import json, os
           results = json.loads(os.environ["JOB_RESULTS"])
-          assert set(results) == {"tests", "frontend", "quality"}
+          assert set(results) == {"tests", "frontend", "quality", "agentic-assets"}
           assert all(job["result"] == "success" for job in results.values()), results
           PY
 
