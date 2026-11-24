@@ -151,8 +151,8 @@ instructions before meaningful changes in these areas.
 
 ## Shared repository protection standard
 
-- Both `main` and `develop` require a pull request, successful `quality-gate`
-  and the repository's behavior and frontend/container checks. Missing,
+- Both `main` and `develop` require a pull request and successful `quality-gate`,
+  which aggregates behavior, frontend, quality and engineering-asset checks. Missing,
   skipped, cancelled, or failing required checks do not authorize a merge.
 - The required approving-review count is zero. Independent, code-owner and
   latest-head approvals are not mandatory. A maintainer can merge their own
@@ -164,12 +164,14 @@ instructions before meaningful changes in these areas.
   frozen to an older base. Base history still guards typing debt, permanent
   coverage, source suppressions and false retirement. No self-amendment veto
   or separate approval metadata is required.
-- Do not disable required checks or leave permanent bypasses. Any expressly
-  authorized administrative exception must be limited to the intended pull
-  requests and removed immediately afterward.
+- The four repository rulesets protect `main`/`develop`, immutable `v*` tags,
+  the same-repository release-branch check for `main`, and `quality-gate`.
+  Required checks are bound to GitHub Actions, without strict branch-update or
+  conversation-resolution requirements. Repository admins have the approved
+  Always allow bypass; do not use it without explicit task authorization.
 - Require SHA pinning in repository Actions settings. Keep CodeQL Actions
   security analysis enabled and authorize `pull_request_target` only for
-  `.github/workflows/block-pr-to-main.yml`, without running pull request code.
+  `.github/workflows/release-branch-guard.yml`, without running pull request code.
 - The normal `develop` to release to `main` flow remains unchanged. This
   standard does not authorize publishing a release or deploying.
 
@@ -486,9 +488,9 @@ from earlier attempts are rejected, so rerun all quality jobs together.
 Candidate policy/checker/owner changes cannot self-approve. Bootstrap has no
 base policy and deliberately fails its policy result.
 
-The shared repository standard configures required `quality-gate`, tests and
-frontend checks on `develop`/`main`, with zero mandatory approving reviews
-and no permanent bypass. `CODEOWNERS` routes quality-control ownership to
+The shared repository standard requires `quality-gate` on `develop`/`main`,
+aggregating tests, frontend, quality and engineering assets, with zero mandatory
+approving reviews and the authorized repository-admin bypass. `CODEOWNERS` routes quality-control ownership to
 `@placerda` without requesting a second reviewer. Protected-policy findings
 remain technical integrity failures, not a requirement for another person's
 GitHub approval. Guardrail repair requires explicit maintainer authorization

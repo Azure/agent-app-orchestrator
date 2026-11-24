@@ -22,7 +22,7 @@ def historical_json(path: str) -> dict:
 
 
 def test_evidence_job_fetches_immutable_provenance_history():
-    pipeline = yaml.safe_load((ROOT / ".github/workflows/pr_pipeline.yaml").read_text())
+    pipeline = yaml.safe_load((ROOT / ".github/workflows/quality-gate.yml").read_text())
     checkouts = [
         step for step in pipeline["jobs"]["tests"]["steps"]
         if step.get("uses", "").startswith("actions/checkout@")
