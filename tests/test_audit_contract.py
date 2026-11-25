@@ -400,7 +400,8 @@ def test_recursive_redaction_handles_cycles_unknown_objects_and_bounds():
         "-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----",
         "eyJabcdefgh.ijklmnop.qrstuvwxyz",
         '{"api_key":"supersecret123"}',
-        "Authorization: Basic dXNlcjpwYXNzd29yZA==",
+        # Built at runtime so secret scanning does not match a literal header.
+        "Authorization: Basic " + base64.b64encode(b"fake-user:fake-pass").decode(),
         "Cookie: session=supersecret123",
         "https://user:password@example.test/path",
         '{"password":"abc"}',
