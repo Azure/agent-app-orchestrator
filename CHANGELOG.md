@@ -1,5 +1,19 @@
 # Changelog
 
+## [v7.2.4] - 2026-11-25
+
+### Changed
+
+- **Unified repository quality and release checks.** Consolidate protected
+  quality checks and require release branches for pull requests to `main`.
+- **Simplified code ownership.** Route repository-wide ownership to the
+  designated maintainer.
+
+### Fixed
+
+- **Removed a secret-like test fixture.** Construct the fake HTTP Basic
+  authorization header at runtime while preserving audit redaction tests.
+
 ## [v7.2.3] - 2026-11-23
 
 ### Changed
