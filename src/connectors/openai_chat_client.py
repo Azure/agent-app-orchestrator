@@ -16,7 +16,6 @@ from openai import AsyncAzureOpenAI, BadRequestError
 from pydantic.errors import PydanticInvalidForJsonSchema
 
 from agent_framework import (
-    ChatClientProtocol,
     ChatMessage,
     ChatResponse,
     ChatResponseUpdate,

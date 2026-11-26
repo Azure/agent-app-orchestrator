@@ -67,6 +67,8 @@ async def test_prompt_upload_reports_failures_and_preserves_confirmed_writes(tmp
     else:
         assert writes == ["base_first", "base_last"]
         assert caplog.records
+    if mode != "missing":
+        config.assert_called_once_with()
     assert marker not in caplog.text
 
 
