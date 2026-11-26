@@ -58,7 +58,7 @@ def test_optional_signing_failure_is_unsigned_safe_and_closes_client(
     monkeypatch.setattr("azure.storage.blob.aio.BlobServiceClient", lambda **kwargs: client)
     monkeypatch.setattr(
         "connectors.identity_manager.get_identity_manager",
-        lambda: types.SimpleNamespace(get_aio_credential=lambda: object()),
+        lambda: types.SimpleNamespace(get_aio_credential=object),
     )
 
     def generate(**kwargs):
@@ -90,7 +90,7 @@ def test_cancellation_propagates_and_does_not_cache_unconfirmed_key(monkeypatch,
     monkeypatch.setattr("azure.storage.blob.aio.BlobServiceClient", lambda **kwargs: client)
     monkeypatch.setattr(
         "connectors.identity_manager.get_identity_manager",
-        lambda: types.SimpleNamespace(get_aio_credential=lambda: object()),
+        lambda: types.SimpleNamespace(get_aio_credential=object),
     )
     with pytest.raises(asyncio.CancelledError) as caught:
         asyncio.run(blob_sas.sign_blob_url(URL))
@@ -117,7 +117,7 @@ def test_cache_never_reuses_another_account_or_near_expiry_key(monkeypatch, expi
     monkeypatch.setattr("azure.storage.blob.aio.BlobServiceClient", lambda **kwargs: client)
     monkeypatch.setattr(
         "connectors.identity_manager.get_identity_manager",
-        lambda: types.SimpleNamespace(get_aio_credential=lambda: object()),
+        lambda: types.SimpleNamespace(get_aio_credential=object),
     )
     assert asyncio.run(blob_sas._get_user_delegation_key(ACCOUNT)) == "new-key"
     client.get_user_delegation_key.assert_awaited_once()
