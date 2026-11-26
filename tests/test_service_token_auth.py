@@ -9,7 +9,6 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import HTTPException
 
 import dependencies
-from dependencies import validate_auth
 
 TENANT = "11111111-1111-1111-1111-111111111111"
 AUDIENCE = "api://agent-lz-orchestrator"
@@ -67,7 +66,7 @@ def _env(monkeypatch):
 
 
 async def _call(header):
-    return await validate_auth(dapr_api_token=None, x_api_key=None, x_service_authorization=header)
+    return await dependencies.validate_auth(dapr_api_token=None, x_api_key=None, x_service_authorization=header)
 
 
 async def test_valid_service_token_accepted():
@@ -120,9 +119,9 @@ async def test_not_configured_rejected(monkeypatch, missing):
 async def test_service_token_takes_precedence_over_api_key(monkeypatch):
     monkeypatch.setenv("ORCHESTRATOR_APP_APIKEY", "secret")
     with pytest.raises(HTTPException):
-        await validate_auth(dapr_api_token=None, x_api_key="secret", x_service_authorization="Bearer bad")
+        await dependencies.validate_auth(dapr_api_token=None, x_api_key="secret", x_service_authorization="Bearer bad")
 
 
 async def test_api_key_fallback_still_works(monkeypatch):
     monkeypatch.setenv("ORCHESTRATOR_APP_APIKEY", "secret")
-    assert await validate_auth(dapr_api_token=None, x_api_key="secret", x_service_authorization=None) is True
+    assert await dependencies.validate_auth(dapr_api_token=None, x_api_key="secret", x_service_authorization=None) is True
