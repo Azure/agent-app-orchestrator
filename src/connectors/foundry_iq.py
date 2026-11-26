@@ -214,16 +214,6 @@ WEB_GROUNDING_KNOWLEDGE_SOURCE_NAME_KEY = "WEB_GROUNDING_KNOWLEDGE_SOURCE_NAME"
 WEB_GROUNDING_ALLOWED_DOMAINS_KEY = "WEB_GROUNDING_ALLOWED_DOMAINS"
 WEB_GROUNDING_BLOCKED_DOMAINS_KEY = "WEB_GROUNDING_BLOCKED_DOMAINS"
 
-# Knowledge source kinds that must never fall back to the service managed
-# identity for x-ms-query-source-authorization. These sources run against
-# external systems (M365, Fabric) where impersonation, not app identity, is
-# the security boundary. ``web`` is deliberately excluded: Grounding with
-# Bing hits the public internet and has no per-user ACL to enforce, so no
-# authorization header is added for that source.
-_REMOTE_KNOWLEDGE_SOURCE_KINDS = frozenset(
-    {"workIQ", "fabricOntology", "fabricDataAgent", "remoteSharePoint"}
-)
-
 # Search-audience scope used for the service token.
 _SEARCH_SCOPE = "https://search.azure.com/.default"
 
@@ -1706,8 +1696,8 @@ class FoundryIQClient:
 
         Controls emission of the ``maxRuntimeInSeconds`` runtime ceiling. Web
         grounding calls the public Bing endpoint and can add several seconds
-        of latency, so it counts toward the ceiling even though it is not in
-        the OBO-required ``_REMOTE_KNOWLEDGE_SOURCE_KINDS`` frozenset.
+        of latency, so it counts toward the ceiling even though public web
+        data has no per-user ACL. Remote source builders check OBO independently.
         """
         return (
             self.work_iq_enabled
