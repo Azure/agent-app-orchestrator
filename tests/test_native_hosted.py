@@ -15,7 +15,6 @@ pytest.importorskip("agent_framework_foundry_hosting")
 from native import hosted
 from native.agent import create_agent
 from native.contracts import ResearchReviewResult, ResearchReviewStart
-from native.tools import ToolIdentity
 from test_native_runtime import SERVICE, RecordingClient, fake_config
 
 
