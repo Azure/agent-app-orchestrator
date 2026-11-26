@@ -119,6 +119,7 @@ class HostedRetrievalError(ValueError):
                             ).decode("utf-8")
                             challenge = cls._validated_claims(decoded)
                         except (ValueError, UnicodeError):
+                            # An invalid optional challenge falls back to the original 401/403 response.
                             pass
         message = (
             "Additional sign-in verification is required for protected retrieval."

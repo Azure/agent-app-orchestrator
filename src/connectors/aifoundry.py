@@ -1,5 +1,4 @@
 import logging
-import time
 import tiktoken
 
 from azure.identity import get_bearer_token_provider

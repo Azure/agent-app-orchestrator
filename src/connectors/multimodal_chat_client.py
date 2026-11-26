@@ -10,7 +10,6 @@ multimodal format: [{"type": "text", ...}, {"type": "image_url", ...}].
 import json
 import logging
 from collections.abc import Sequence
-from typing import Any
 
 from agent_framework import ChatMessage
 

@@ -1034,9 +1034,9 @@ def test_conflicting_local_loader_alias_cannot_hide_dynamic_global_import(tmp_pa
 
 
 @pytest.mark.parametrize("source", [
-    "try:\n work()\nexcept Exception:\n pass\n"
+    "try:\n work()\nexcept Exception:\n pass\n" +
     "def unrelated():\n from builtins import ValueError as Exception\n",
-    "__import__(name)\n"
+    "__import__(name)\n" +
     "def unrelated():\n from json import loads as __import__\n",
 ])
 def test_local_alias_cannot_shadow_implicit_global_builtin(tmp_path, source):
@@ -1331,9 +1331,9 @@ def test_junit_class_evidence_resolves_actual_test_module(tmp_path):
 
 @pytest.mark.parametrize("cases", [
     '<testcase classname="tests.test_missing_module" name="test_not_executed"/>',
-    '<testcase classname="tests.test_quality_policy" name="test_duplicate"/>'
+    '<testcase classname="tests.test_quality_policy" name="test_duplicate"/>' +
     '<testcase classname="tests.test_quality_policy" name="test_duplicate"><failure/></testcase>',
-    '<testcase classname="tests.test_quality_policy" name="test_duplicate"/>'
+    '<testcase classname="tests.test_quality_policy" name="test_duplicate"/>' +
     '<testcase classname="tests.test_quality_policy" name="test_duplicate"/>',
 ])
 def test_junit_unknown_or_duplicate_selector_is_not_passing_evidence(tmp_path, cases):
