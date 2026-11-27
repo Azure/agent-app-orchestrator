@@ -1,6 +1,4 @@
 import logging
-import asyncio
-from typing import Optional
 from azure.identity import ChainedTokenCredential, ManagedIdentityCredential, AzureCliCredential
 from azure.identity.aio import (
     ChainedTokenCredential as AsyncChainedTokenCredential,

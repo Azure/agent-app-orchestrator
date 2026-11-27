@@ -1,4 +1,3 @@
-import os
 import logging
 import re
 from azure.identity.aio import ManagedIdentityCredential, AzureCliCredential, ChainedTokenCredential

@@ -1,5 +1,14 @@
 # Changelog
 
+## [v7.2.5] - 2026-11-27
+
+### Changed
+
+- **Foundry IQ source checks.** Remove an unused remote-source kind inventory;
+  source builders continue to check delegated authorization independently.
+- **Quality and regression coverage.** Clean up unused imports and clarify
+  test fixtures, optional claims fallback and web-grounding coverage.
+
 ## [v7.2.4] - 2026-11-25
 
 ### Changed

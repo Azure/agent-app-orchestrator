@@ -1,6 +1,5 @@
 import asyncio
 import os
-import json
 import logging
 from dotenv import load_dotenv
 
@@ -13,7 +12,7 @@ async def main():
         logging.error("[upload_prompts] Prompt directory is unavailable")
         raise SystemExit(1)
 
-    config = get_config()
+    get_config()
 
     client = CosmosDBClient()
     failed = False
