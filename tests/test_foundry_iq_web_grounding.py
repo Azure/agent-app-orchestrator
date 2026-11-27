@@ -286,6 +286,35 @@ async def test_web_coexists_with_all_remote_kinds():
     assert "web" in kinds
 
 
+@pytest.mark.parametrize("obo_token", [None, "synthetic-user-obo"], ids=["missing", "present"])
+async def test_remote_sources_require_obo_but_web_does_not(obo_token):
+    client, session = _build_client(
+        _SAMPLE_PAYLOAD,
+        config_overrides={
+            "WORK_IQ_ENABLED": True,
+            "WORK_IQ_KNOWLEDGE_SOURCE_NAME": "workiq-ks",
+            "FABRIC_IQ_ENABLED": True,
+            "FABRIC_IQ_KNOWLEDGE_SOURCE_NAME": "fabric-ks",
+            "FABRIC_DATA_AGENT_ENABLED": True,
+            "FABRIC_DATA_AGENT_KNOWLEDGE_SOURCE_NAME": "fda-ks",
+            "SHAREPOINT_REMOTE_ENABLED": True,
+            "SHAREPOINT_REMOTE_KNOWLEDGE_SOURCE_NAME": "sharepoint-ks",
+            "WEB_GROUNDING_ENABLED": True,
+            "WEB_GROUNDING_KNOWLEDGE_SOURCE_NAME": "web-ks",
+        },
+    )
+    await client.retrieve("hello", obo_token=obo_token)
+    kinds = {source["kind"] for source in session.captured["json"]["knowledgeSourceParams"]}
+    remote_kinds = {"workIQ", "fabricOntology", "fabricDataAgent", "remoteSharePoint"}
+    assert "web" in kinds
+    assert kinds & remote_kinds == (remote_kinds if obo_token else set())
+    headers = session.captured["headers"]
+    if obo_token:
+        assert headers["x-ms-query-source-authorization"] == obo_token
+    else:
+        assert "x-ms-query-source-authorization" not in headers
+
+
 # ---------------------------------------------------------------------------
 # _normalize_references for the web shape
 # ---------------------------------------------------------------------------
