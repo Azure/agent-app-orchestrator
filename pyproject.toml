@@ -16,7 +16,7 @@ dependencies = [
 hosted = ["agent-framework-foundry-hosting==1.0.0b261030"]
 container-apps = [
     "agent-framework-durabletask==1.0.0b261029",
-    "durabletask==1.12.0", "durabletask-azuremanaged==1.12.0",
+    "durabletask==1.13.0", "durabletask-azuremanaged==1.12.0",
 ]
 tools = [
     "azure-cosmos==4.5.1", "azure-keyvault-secrets==4.11.2",
