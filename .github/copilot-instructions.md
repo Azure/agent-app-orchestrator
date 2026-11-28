@@ -1,7 +1,7 @@
 # Agent Landing Zone Orchestrator engineering core
 
 Read `AGENTS.md` and every scoped instruction that applies before changing a
-file. The assets under `.github/agents/` and `.github/skills/` are GitHub
+file. The assets under `.github/skills/` and `.github/instructions/` are GitHub
 Copilot engineering helpers; they are separate from the runtime strategies
 under `src/strategies/`.
 
@@ -22,9 +22,8 @@ under `src/strategies/`.
 - Declare completion only with verifiable evidence and explicit residual
   risks.
 
-Use the specialized roles under `.github/agents/` for architecture,
-implementation, and release work. Load reusable procedures from
-`.github/skills/` only when their descriptions match the task.
+Load reusable procedures from `.github/skills/` only when their descriptions
+match the task.
 
 ## Branching strategy
 
