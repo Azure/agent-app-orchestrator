@@ -5,7 +5,7 @@ applyTo: "src/strategies/**/*.py,src/orchestration/**/*.py,src/prompts/**,src/up
 # Runtime agent strategies and orchestration
 
 These files implement agents and strategies executed by the product. They are
-separate from GitHub Copilot engineering agents under `.github/agents/`.
+separate from GitHub Copilot engineering assets under `.github/`.
 
 - Add orchestration behavior through a focused `BaseAgentStrategy` subclass.
 - Register an operator-selectable strategy in `AgentStrategies`,
