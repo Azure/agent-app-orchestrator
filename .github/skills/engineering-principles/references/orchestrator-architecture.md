@@ -14,7 +14,7 @@ Agent Landing Zone solution. At a high level it:
 6. persists conversation state in Cosmos DB; and
 7. records bounded telemetry and optional audit events.
 
-GitHub Copilot engineering agents in `.github/agents/` assist maintainers.
+GitHub Copilot engineering assets in `.github/` assist maintainers.
 They are repository tooling and never participate in this runtime flow.
 
 ## Boundaries

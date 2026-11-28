@@ -70,8 +70,8 @@ instructions, governance policies, ADRs, and executable contracts remain here.
 - `scripts/`, `.azure/`, `azure.yaml`, `Dockerfile`, and `infra/`: deployment
   and operational assets.
 - `tests/`: the maintained pytest suite with mocked Azure boundaries.
-- `.github/agents/`, `.github/skills/`, and `.github/instructions/`: GitHub
-  Copilot engineering roles, procedures, and path-specific guidance.
+- `.github/skills/` and `.github/instructions/`: GitHub Copilot engineering
+  procedures and path-specific guidance.
 
 ## How to work
 
@@ -513,8 +513,8 @@ Published contributor guidance is maintained in `Azure/AI-Landing-Zones` on
 - Use `tests/conftest.py` fixtures for App Configuration, Cosmos DB, identity,
   and dependency seams; unit tests must not require live Azure credentials.
 - Validate PowerShell and shell deployment variants when either changes.
-- Run the Copilot asset validator whenever `.github/agents/`,
-  `.github/skills/`, or `.github/instructions/` changes.
+- Run the Copilot asset validator whenever `.github/skills/` or
+  `.github/instructions/` changes.
 - A task is complete only when acceptance criteria, tests, documentation, and
   verifiable evidence are in place. State missing validation and residual
   risk explicitly.
