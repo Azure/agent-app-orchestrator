@@ -66,10 +66,10 @@ The Agent Landing Zone repositories are:
    issue does not give. For a bug, check for steps to reproduce, expected and
    actual result, version and deployment mode. For a feature, check for the
    problem, expected result and acceptance criteria.
-6. Suggested path. Suggest `complex` when the work changes more than one
+6. Suggested path. Suggest `spec-driven` when the work changes more than one
    repository, has unclear requirements, needs more than one pull request,
    or changes a contract, configuration key or deployment parameter.
-   Otherwise suggest `simple`. Do not apply the `complex` label. The
+   Otherwise suggest `direct`. Do not apply the `needs-spec` label. The
    maintainer decides.
 7. Call `add_comment` once with this format:
 
@@ -83,7 +83,7 @@ The Agent Landing Zone repositories are:
    | Affected repositories | <repositories> |
    | Possible duplicates | <links or None found> |
    | Missing information | <items or None> |
-   | Suggested path | <simple or complex>: <one-line reason> |
+   | Suggested path | <direct or spec-driven>: <one-line reason> |
 
    A maintainer confirms this triage, sets the Milestone and moves the issue
    to Backlog.
