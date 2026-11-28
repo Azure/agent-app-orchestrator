@@ -470,7 +470,6 @@ def main() -> int:
     validate_required_guidance(errors)
 
     groups = (
-        (ROOT / ".github" / "agents", "*.md", "agent"),
         (ROOT / ".github" / "skills", "*/SKILL.md", "skill"),
         (ROOT / ".github" / "instructions", "*.instructions.md", "instruction"),
     )
